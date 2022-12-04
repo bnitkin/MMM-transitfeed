@@ -114,8 +114,7 @@ module.exports = NodeHelper.create({
         // Empty arrivals list to prepare for refresh
         station.departures = [];
         if (station.type == "bus_stops" || station.type == "trolley_stops") {
-            // Get 30 results for buses. That covers an hour of traffic at all but the busiest stops.
-            let url = "https://www3.septa.org/api/BusSchedules/index.php?results=30&stop_id=" + station.id;
+            let url = "https://www3.septa.org/api/BusSchedules/index.php?results=5&stop_id=" + station.id;
             json = await getJSON(url);
             for (const route of Object.values(json)) {
                 for (const arrival of route) {
@@ -130,8 +129,7 @@ module.exports = NodeHelper.create({
             }
         }
         if (station.type == "rail_stations") {
-            // Poll 10 results for trains; SEPTA returns 10 in each direction.
-            let url = "https://www3.septa.org/api/Arrivals/index.php?results=10&station=" + station.name;
+            let url = "https://www3.septa.org/api/Arrivals/index.php?results=5&station=" + station.name;
             json = await getJSON(url);
             // Traversing through the weird time/date header and list of directions:
             // {
@@ -157,11 +155,17 @@ module.exports = NodeHelper.create({
                 }
             }
         }
+        // Remove entries from the past
+        station.departures = station.departures.filter(departure => departure.date > Date.now())
+
         // Sort by route, then departure time.
         // That lets the renderer make some easy assumptions.
         station.departures.sort((one, two) =>
-            one.route.localeCompare(two.route) ||
+            one.route.localeCompare(two.route, "en-u-kn-true") ||
             one.date - two.date);
         Log.log("MMM-septa: found " + station.departures.length + " departures from " + station.name);
+
+        // Pushing data internally is cheap, and it's fun to be quick.
+        this.updatePushETAs()
     },
 })

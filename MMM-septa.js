@@ -97,9 +97,12 @@ Module.register("MMM-septa", {
             departureCount += 1;
             let departure_time = row.insertCell();
             departure_time.innerHTML = departure.minutes;
+            if (departure.minutes <= 5) {
+                departure_time.style.color = "#f66";
+            }
             if (departureCount == 1) {
-            departure_time.className = "bright";
-            departure_time.style.width = "35px";
+                departure_time.className = "bright";
+                departure_time.style.width = "35px";
             } else {
                 departure_time.className = "dim xsmall";
                 departure_time.style.width = "30px";
