@@ -22,6 +22,7 @@ Module.register("MMM-gtfs", {
             // Excluding shapes makes loading faster.
 //            {"url": "https://transitfeeds.com/p/septa/262/latest/download", exclude: ['shapes']},
 //            {"url": "https://transitfeeds.com/p/septa/263/latest/download", exclude: ['shapes']},
+            {"path": "/home/ben/Downloads/train.zip", exclude: ['shapes']},
             {"path": "/home/ben/Downloads/bus.zip", exclude: ['shapes']},
          ]
       },
@@ -29,18 +30,22 @@ Module.register("MMM-gtfs", {
       // Route + station pairs to monitor for departures
       queries: [
          {route_name: "Chestnut Hill West", stop_name: "Tulpehocken", direction: 0},
-         {route_name: "Chestnut Hill East", stop_name: "Germantown", direction: 0},
+         {route_name: "Chestnut Hill East", stop_name: "Germantown", direction: 1},
+         {route_name: "53", stop_name: "Tulpehocken"},
+         {route_name: "65", stop_name: "Walnut Ln & Wayne"},
       ],
       departuresPerRoute: 3,
+      showTimeFromNow: true,
+      showStationNames: true,
    },
 
    start: function () {
-      // Send the config dictionary to the helper.
-      this.sendSocketNotification("GTFS_STARTUP", this.config.gtfs_config);
-
       // Set up initial DOM wrapper
       this.wrapper = document.createElement("table");
       this.trips = [];
+
+      // Send the config dictionary to the helper.
+      this.sendSocketNotification("GTFS_STARTUP", this.config.gtfs_config);
    },
 
    getDom: function () {
@@ -53,11 +58,12 @@ Module.register("MMM-gtfs", {
       this.wrapper.innerHTML = "";
 
       for (trip of this.trips) {
-         if (trip.stop_name != lastTrip.stop_name) {
+         if (this.config.showStationNames && trip.stop_name != lastTrip.stop_name) {
             row = this.wrapper.insertRow();
             let stop = row.insertCell();
             stop.innerHTML = trip.stop_name;
-            stop.colspan = 5;
+            stop.colSpan = 5;
+            stop.className = "align-left";
          }
          if (trip.route_name != lastTrip.route_name
           || trip.trip_terminus != lastTrip.trip_terminus) {
@@ -65,7 +71,7 @@ Module.register("MMM-gtfs", {
 
             row = this.wrapper.insertRow();
             let route = row.insertCell();
-            route.innerHTML = trip.route_name;
+            route.innerHTML = trip.route_id;
             route.className = "align-left bright";
 
             let terminus = row.insertCell();
@@ -82,7 +88,10 @@ Module.register("MMM-gtfs", {
          let departure_time = row.insertCell();
          Log.log(trip);
          let minutes = ((trip.stop_time - Date.now()) / 1000 / 60).toFixed();
-         departure_time.innerHTML = minutes;
+         if (this.config.showTimeFromNow)
+            departure_time.innerHTML = minutes;
+         else
+            departure_time.innerHTML = trip.stop_time.toTimeString().slice(0,5);
 
          if (minutes <= 5) {
             departure_time.style.color = "#f66";
@@ -99,31 +108,33 @@ Module.register("MMM-gtfs", {
       return this.wrapper;
    },
 
-   socketNotificationReceived: function(notification, payload) {
+   socketNotificationReceived: async function(notification, payload) {
       // Once the GTFS data is all imported, resolve our queries.
       if (notification == "GTFS_READY") {
          // Daily poll for new GTFS info.
-         setInterval(() => this.runQueries(), 1000*60*60*24);
+         //setInterval(() => this.runQueries(), 1000*60*60*24);
+         this.runQueries()
          // Every minute, check in on real-time data (TODO)
          setInterval(() => this.updateDepartures(), 1000*60*1);
       }
       if (notification == "GTFS_QUERY_RESULTS") {
          Log.log("MMM-gtfs got a query response");
          for (trip of payload) trip.stop_time = new Date(trip.stop_time);
-         this.trips = this.trips.concat(payload);
+         this.trips = payload;
          Log.log(this.trips);
          this.updateDepartures();
       }
    },
 
-   runQueries: function() {
+   runQueries: async function() {
       // Generate more trips from the GTFS source
-      for (query of this.config.queries) {
-         Log.log("Querying");
-         Log.log(query);
-         this.trips = [];
-         this.sendSocketNotification("GTFS_QUERY2", {'gtfs_config': config.gtfs_config, 'query': query});
-      }
+//      for (query of this.config.queries) {
+      Log.log("Querying");
+      Log.log(this.config.queries);
+      this.sendSocketNotification("GTFS_QUERY_SEARCH",
+          {'gtfs_config': this.config.gtfs_config, 'queries': this.config.queries});
+//         await new Promise(r => setTimeout(r, 2000));
+//      }
    },
 
    updateDepartures: function() {

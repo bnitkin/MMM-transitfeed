@@ -21,10 +21,10 @@ module.exports = NodeHelper.create({
       console.log(this.name + ' helper method started...'); /*eslint-disable-line*/
    },
 
-   socketNotificationReceived: async function (notification, payload) {
+   socketNotificationReceived: function (notification, payload) {
       Log.log("MMM-gtfs: helper recieved", notification, payload);
-      if (notification === 'GTFS_STARTUP') this.startup(payload);
-      if (notification === "GTFS_QUERY2")  this.query(payload.gtfs_config, payload.query);
+      if (notification === 'GTFS_STARTUP')       this.startup(payload);
+      if (notification === 'GTFS_QUERY_SEARCH')  this.query(payload.gtfs_config, payload.queries);
    },
 
    startup: async function(gtfs_config) {
@@ -36,50 +36,63 @@ module.exports = NodeHelper.create({
       Log.log("MMM-gtfs: Done importing!");
    },
 
-   query: async function(gtfs_config, query) {
+   query: async function(gtfs_config, queries) {
+      // Maps a user query to a list of stops & routes to actually monitor.
+      // That makes getting departures much faster.
       const db = await gtfs.openDb(gtfs_config);
-      //const query = {route_name: "Chestnut Hill West", stop_name: "Tulpehocken", direction: 0};
 
       let results = [];
-      // Find stops matching the query string
-      const allStops = await gtfs.getStops({}, ['stop_name', 'stop_id']);
-      for (stop of allStops) {
-         if (stop.stop_name.includes(query.stop_name)) {
 
-            // Find the routes serving this stop.
-            const routes = await gtfs.getRoutes({stop_id: stop.stop_id}, ['route_long_name', 'route_id']);
-            for (route of routes) {
-               // If a user provided a route name, filter on it.
-               if (query.route_name === undefined || route.route_long_name.includes(query.route_name)) {
+      for (query of queries) {
+         // Find stops matching the query string
+         // TODO: Reorder to filter to route first.
+         // Find the routes matching the query.
+         const routes = await gtfs.getRoutes({}, ['route_long_name', 'route_id']);
+         for (route of routes) {
+            // If a user provided a route name, filter on it.
+            if (query.route_name === undefined
+                || route.route_id.includes(query.route_name)
+                || route.route_long_name.includes(query.route_name)) {
+               Log.log(route);
 
-                  // Find all trips for the route
-                  //const trips = await gtfs.getTrips({route_id: route.route_id}, ['trip_id', 'direction_id', 'trip_headsign', 'service_id']);
-                  const trips = await gtfs.getTrips({route_id: route.route_id});
-                  for (trip of trips) {
-                     if (query.direction === undefined || query.direction == trip.direction_id) {
-                        // Now we have the stop and all the trips.
-                        const stopDays = await gtfs.getCalendars({service_id: trip.service_id});
-                        const stoptime = await gtfs.getStoptimes({trip_id: trip.trip_id, stop_id: stop.stop_id}, ['id', 'departure_time']);
+               const stops = await gtfs.getStops({route_id: route.route_id}, ['stop_name', 'stop_id']);
+               for (stop of stops) {
+                  if (stop.stop_name.includes(query.stop_name)) {
+                     Log.log(stop);
 
-                        // If there's no stoptime, the train skips this stop.
-                        if (stoptime.length == 0) continue;
+                     // Find all trips for the route
+                     //const trips = await gtfs.getTrips({route_id: route.route_id}, ['trip_id', 'direction_id', 'trip_headsign', 'service_id']);
+                     const trips = await gtfs.getTrips({route_id: route.route_id});
+                     for (trip of trips) {
+                        if (query.direction === undefined || query.direction == trip.direction_id) {
+                           // Now we have the stop and all the trips.
+                           const stopDays = await gtfs.getCalendars({service_id: trip.service_id});
+                           const stoptime = await gtfs.getStoptimes({trip_id: trip.trip_id, stop_id: stop.stop_id}, ['id', 'departure_time']);
 
-                        const stopDatetimes = makeStopDatetimes(stopDays[0], stoptime[0].departure_time);
-                        for (datetime of stopDatetimes) {
-                           results.push({
-                              // IDs for tracing
-                              time_id: stoptime[0].id,
-                              stop_id: stop.stop_id,
-                              route_id: route.route_id,
-                              trip_id: trip.trip_id,
+                           // If there's no stoptime, the train skips this stop.
+                           if (stoptime.length == 0) continue;
 
-                              route_name: route.route_long_name,
-                              trip_terminus: trip.trip_headsign,
-                              stop_name: stop.stop_name,
-                              stop_time: datetime,
+                           const stopDatetimes = makeStopDatetimes(stopDays[0], stoptime[0].departure_time);
+                           Log.log("Train time is " + stoptime[0].departure_time
+                                   + " parsed as " + stopDatetimes[0] + " it is " + Date.now()
+                                   + " which is in " + ((stopDatetimes[0] - Date.now()) / 1000 / 60).toFixed());
+                           for (datetime of stopDatetimes) {
+                              results.push({
+                                           // IDs for tracing
+                                           time_id: stoptime[0].id,
+                                           stop_id: stop.stop_id,
+                                           route_id: route.route_id,
+                                           trip_id: trip.trip_id,
 
-                              delay: 0,
-                           });
+                                           route_name: route.route_long_name,
+                                           trip_terminus: trip.trip_headsign,
+                                           stop_name: stop.stop_name,
+                                           stop_time: datetime,
+                                           clock_time: stoptime[0].departure_time,
+
+                                           delay: 0,
+                              });
+                           }
                         }
                      }
                   }
@@ -89,13 +102,14 @@ module.exports = NodeHelper.create({
       }
       // Sort, then publish.
       results = results.sort((one, two) =>
-            one.route_name.localeCompare(two.route_name, "en-u-kn-true") ||
+            one.route_id.localeCompare(two.route_id, "en-u-kn-true") ||
             one.stop_name.localeCompare(two.stop_name, "en-u-kn-true") ||
             one.trip_terminus.localeCompare(two.trip_terminus, "en-u-kn-true") ||
             one.stop_time - two.stop_time);
 
       // Now we have everything we need.
-      Log.log("Sending " + results.length + " starting with");
+      Log.log("Sending " + results.length + " from query");
+      Log.log(query);
       Log.log(results[0]);
       this.sendSocketNotification("GTFS_QUERY_RESULTS", results);
    },
