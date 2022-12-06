@@ -1,171 +1,142 @@
 /* Magic Mirror
- * Module: MMM-septa
+ * Module: MMM-gtfs
+ * A generic transit parser to display upcoming departures
+ * for a selected set of lines
  *
  * By Ben Nitkin
  * MIT Licensed.
  */
+
+// to download GTFS file
 const Log = require("logger");
 const fetch = require("fetch");
 const NodeHelper = require("node_helper");
 
-async function getJSON(url) {
-    Log.log("MMM-septa fetching ", url);
-    const response = await fetch(url, {headers: {"User-Agent": "Mozilla/5.0 (Node.js) MagicMirror/" + global.version}});
-    if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    const json = await response.json();
-    return json;
-}
+// GTFS stuff
+const gtfs = require('gtfs');
 
 module.exports = NodeHelper.create({
-    // Subclassed functions
-    start: function () {
-        console.log(this.name + ' helper method started...'); /*eslint-disable-line*/
+   // Subclassed functions
+   start: function () {
+      console.log(this.name + ' helper method started...'); /*eslint-disable-line*/
+   },
 
-        // List of stations to monitor for departures
-        this.stations = [];
+   socketNotificationReceived: async function (notification, payload) {
+      Log.log("MMM-gtfs: helper recieved", notification, payload);
+      if (notification === 'GTFS_STARTUP') this.startup(payload);
+      if (notification === "GTFS_QUERY2")  this.query(payload.gtfs_config, payload.query);
+   },
 
-        // Update arrivals timetables 20s after start, then hourly.
-        // The arrow's a goofy hack to keep the this. context.
-        setInterval(() => this.updateArrivalsFromSEPTA(), 1000*60*60);
-        setTimeout(()  => this.updateArrivalsFromSEPTA(), 1000*20);
+   startup: async function(gtfs_config) {
+      // Import the data. Send a notification when ready.
+      Log.log("MMM-gtfs: Importing with " + gtfs_config);
+      await gtfs.import(gtfs_config);
+      // Send a ready message now that we're loaded.
+      this.sendSocketNotification("GTFS_READY", null);
+      Log.log("MMM-gtfs: Done importing!");
+   },
 
-        // Update arrival estimates every 30s.
-        setInterval(() => this.updatePushETAs(), 1000*30);
-    },
+   query: async function(gtfs_config, query) {
+      const db = await gtfs.openDb(gtfs_config);
+      //const query = {route_name: "Chestnut Hill West", stop_name: "Tulpehocken", direction: 0};
 
-    socketNotificationReceived: function (notification, payload) {
-        Log.log("MMM-septa helper recieved", notification);
-        if (notification === 'MONITOR_NEARBY_DEPARTURES') {
-            this.watchNewStations(payload);
-            // Special update for faster loading on refresh.
-            this.updatePushETAs();
-        }
-    },
+      let results = [];
+      // Find stops matching the query string
+      const allStops = await gtfs.getStops({}, ['stop_name', 'stop_id']);
+      for (stop of allStops) {
+         if (stop.stop_name.includes(query.stop_name)) {
 
-    // Non-inherited stuff
-    updatePushETAs: function() {
-        Log.log("MMM-septa is updating ETAs for " + this.stations.length + " stations");
-        for (let station of this.stations) {
-            // Update ETAs for each line, and publish.
-            for (let departure of station.departures) {
-                // This could be fancier by hitting the SEPTA real-time APIs.
-                departure.minutes = ((departure.date - Date.now()) / 1000 / 60).toFixed();
-                //departure.minutes = (departure.minutes / 60).toFixed() + ":" + departure.minutes % 60
-            }
-            this.sendSocketNotification("STATION_DEPARTURES", station);
+            // Find the routes serving this stop.
+            const routes = await gtfs.getRoutes({stop_id: stop.stop_id}, ['route_long_name', 'route_id']);
+            for (route of routes) {
+               // If a user provided a route name, filter on it.
+               if (query.route_name === undefined || route.route_long_name.includes(query.route_name)) {
 
-            // Remove departures that've departed.
-            if ((station.departures.length > 0) && ((station.departures[0].date - Date.now()) < 0)) {
-                station.departures.shift();
-            }
-        }
-    },
+                  // Find all trips for the route
+                  //const trips = await gtfs.getTrips({route_id: route.route_id}, ['trip_id', 'direction_id', 'trip_headsign', 'service_id']);
+                  const trips = await gtfs.getTrips({route_id: route.route_id});
+                  for (trip of trips) {
+                     if (query.direction === undefined || query.direction == trip.direction_id) {
+                        // Now we have the stop and all the trips.
+                        const stopDays = await gtfs.getCalendars({service_id: trip.service_id});
+                        const stoptime = await gtfs.getStoptimes({trip_id: trip.trip_id, stop_id: stop.stop_id}, ['id', 'departure_time']);
 
-    watchNewStations: async function (config) {
-        Log.log("MMM-septa is searcing for stations using:", config);
+                        // If there's no stoptime, the train skips this stop.
+                        if (stoptime.length == 0) continue;
 
-        for (const vehicle_type of config.type) {
-            stop_name = {'bus': 'bus_stops',
-                'train': 'rail_stations',
-                'trolley': 'trolley_stops'}[vehicle_type];
-            if (stop_name === undefined) {
-                Log.warn("MMM-septa: Unrecognized vehicle type " + vehicle_type);
-                continue;
-            }
+                        const stopDatetimes = makeStopDatetimes(stopDays[0], stoptime[0].departure_time);
+                        for (datetime of stopDatetimes) {
+                           results.push({
+                              // IDs for tracing
+                              time_id: stoptime[0].id,
+                              stop_id: stop.stop_id,
+                              route_id: route.route_id,
+                              trip_id: trip.trip_id,
 
-            let url = "https://www3.septa.org/api/locations/get_locations.php"
-                + "?lon="    + config.lon
-                + "&lat="    + config.lat
-                + "&radius=" + config.radius
-                + "&type="   + stop_name;
-            json = await getJSON(url);
-            Log.log("MMM-septa discovered " + json.length + " " + vehicle_type + " stations");
-            for (const station of json) {
-                // Don't duplicate stations. This protects against multiple clients or
-                // page reloads.
-                if (this.stations.some(function(element, index, array) {
-                    return element.id == station.location_id;
-                })) continue;
+                              route_name: route.route_long_name,
+                              trip_terminus: trip.trip_headsign,
+                              stop_name: stop.stop_name,
+                              stop_time: datetime,
 
-                // Insert new stations into existing list.
-                this.stations.push({
-                    'name': station.location_name,
-                    'id':   station.location_id,
-                    'type': station.location_type, // bus_stops, etc
-                    'lat':  station.location_lat,
-                    'lon':  station.location_lon,
-                    'departures': [],
-                    // This tracks which widget enrolled a station
-                    'widget-id': config.identifier,
-                });
-            }
-        }
-    },
-
-    updateArrivalsFromSEPTA: function () {
-        for (const station of this.stations) {
-            this.updateStationArrivalsFromSEPTA(station);
-        }
-    },
-
-    updateStationArrivalsFromSEPTA: async function (station) {
-        // Empty arrivals list to prepare for refresh
-        station.departures = [];
-        if (station.type == "bus_stops" || station.type == "trolley_stops") {
-            let url = "https://www3.septa.org/api/BusSchedules/index.php?results=5&stop_id=" + station.id;
-            json = await getJSON(url);
-            for (const route of Object.values(json)) {
-                for (const arrival of route) {
-                    station.departures.push({
-                        'trip_id': arrival.trip_id,
-                        'route': arrival.Route,
-                        'date': new Date(arrival.DateCalender),
-                        'minutes': 0,
-                        'terminus': arrival.DirectionDesc,
-                    });
-                }
-            }
-        }
-        if (station.type == "rail_stations") {
-            let url = "https://www3.septa.org/api/Arrivals/index.php?results=5&station=" + station.name;
-            json = await getJSON(url);
-            // Traversing through the weird time/date header and list of directions:
-            // {
-            //   "Tulpehocken Departures: December 4, 2022, 9:13 am": [
-            //     {
-            //       "Northbound": [
-            //         {
-            //           "direction": "N",
-            //           ...
-            for (const weirdHeader of Object.values(json)) {
-                for (const weirdList of weirdHeader) {
-                    for (const direction of Object.values(weirdList)) {
-                        for (const arrival of direction) {
-                            station.departures.push({
-                                'trip_id': arrival.train_id,
-                                'route': arrival.line,
-                                'date': new Date(arrival.depart_time),
-                                'minutes': 0,
-                                'terminus': arrival.destination,
-                            });
+                              delay: 0,
+                           });
                         }
-                    }
-                }
+                     }
+                  }
+               }
             }
-        }
-        // Remove entries from the past
-        station.departures = station.departures.filter(departure => departure.date > Date.now())
+         }
+      }
+      // Sort, then publish.
+      results = results.sort((one, two) =>
+            one.route_name.localeCompare(two.route_name, "en-u-kn-true") ||
+            one.stop_name.localeCompare(two.stop_name, "en-u-kn-true") ||
+            one.trip_terminus.localeCompare(two.trip_terminus, "en-u-kn-true") ||
+            one.stop_time - two.stop_time);
 
-        // Sort by route, then departure time.
-        // That lets the renderer make some easy assumptions.
-        station.departures.sort((one, two) =>
-            one.route.localeCompare(two.route, "en-u-kn-true") ||
-            one.date - two.date);
-        Log.log("MMM-septa: found " + station.departures.length + " departures from " + station.name);
-
-        // Pushing data internally is cheap, and it's fun to be quick.
-        this.updatePushETAs()
-    },
+      // Now we have everything we need.
+      Log.log("Sending " + results.length + " starting with");
+      Log.log(results[0]);
+      this.sendSocketNotification("GTFS_QUERY_RESULTS", results);
+   },
 })
+
+function makeStopDatetimes(stop_days, stop_time) {
+   // This accepts a GTFS calendar and a stop time
+   // and creates Date objects for the next few days of arrivals.
+   // Start/end dates are ignored for calendars, as are holidays.
+   //
+   // Format reference
+   //stop_time: '09:43:00'
+   //stop_days: {
+   //   service_id: 'M3',
+   //   monday: 0,
+   //   tuesday: 0,
+   //   wednesday: 0,
+   //   thursday: 0,
+   //   friday: 0,
+   //   saturday: 0,
+   //   sunday: 1,
+   //   start_date: 20220821,
+   //   end_date: 20230304
+   // },
+
+   const departures = [];
+
+   // Create a Date with today's date and stop_time for the time.
+   const dateCandidate = new Date();
+   const time = new Date('2000-01-01T' + stop_time)
+   dateCandidate.setHours(time.getHours());
+   dateCandidate.setMinutes(time.getMinutes());
+   dateCandidate.setSeconds(time.getSeconds());
+
+   const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+   for (let i = 0; i < 2; i++) {
+      const dayofweek = days[dateCandidate.getDay()];
+      if (stop_days[dayofweek] == 1)
+         departures.push(new Date(dateCandidate));
+
+      dateCandidate.setDate(dateCandidate.getDate() + 1)
+   }
+   return departures;
+}
