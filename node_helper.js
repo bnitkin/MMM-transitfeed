@@ -47,14 +47,15 @@ module.exports = NodeHelper.create({
       if (this.gtfs_config === undefined) {
          this.gtfs_config = gtfs_config
          await gtfs.import(this.gtfs_config);
+         Log.log("MMM-gtfs: Done importing!");
          this.db = await gtfs.openDb(this.gtfs_config);
+
+         // Start broadcasting the stations & routes we're watching.
+         setInterval(() => this.broadcast(), 1000*60*5);
       }
+
       // Send a ready message now that we're loaded.
       this.sendSocketNotification("GTFS_READY", null);
-      Log.log("MMM-gtfs: Done importing!");
-
-      // Start broadcasting the stations & routes we're watching.
-      setInterval(() => this.broadcast(), 1000*60*5);
    },
 
    query: async function(gtfs_config, query) {
@@ -126,14 +127,6 @@ module.exports = NodeHelper.create({
             }
          }
       }
-
-      // Sort, then publish.
-      results = results.sort((one, two) =>
-            one.route_id.localeCompare(two.route_id, "en-u-kn-true") ||
-            one.stop_name.localeCompare(two.stop_name, "en-u-kn-true") ||
-            one.direction - two.direction ||
-//            one.trip_terminus.localeCompare(two.trip_terminus, "en-u-kn-true") ||
-            one.stop_time - two.stop_time);
 
       // Now we have everything we need.
       Log.log("MMM-gtfs: Sending " + results.length + " trips");

@@ -17,47 +17,30 @@ Module.register("MMM-gtfs", {
       // but custom headers & auth-tokens are supported.
       gtfs_config: {
          agencies: [
-            // These are SEPTA bus & rail routes. Go to transitfeeds.com
+            // These are SEPTA regional rail routes. Go to transitfeeds.com
             // or your transit agency's site to find local GTFS data.
-            // Excluding shapes makes loading faster.
-            //                  "realtimeUrls": [
-//        "https://opendata.somewhere.com/gtfs-rt/VehicleUpdates.pb",
-//        "https://opendata.somewhere.com/gtfs-rt/TripUpdates.pb"
-//      ],
             {
-               "path": "/home/ben/Downloads/train.zip",
-//             "url": "https://transitfeeds.com/p/septa/262/latest/download",
-               "realTimeUrls": [
-                  "https://www3.septa.org/api/pbtojson/Train/Trip/index.php",
-                  "https://www3.septa.org/api/pbtojson/Train/Vehicle/index.php",
-               ],
+               "url": "https://transitfeeds.com/p/septa/262/latest/download",
+               // Excluding shapes makes loading faster.
                exclude: ['shapes']
             },
-          {
-             "path": "/home/ben/Downloads/bus.zip",
-//             "url": "https://transitfeeds.com/p/septa/263/latest/download",
-             "realTimeUrls": [
-                "https://www3.septa.org/api/pbtojson/Bus/Trip/index.php",
-                "https://www3.septa.org/api/pbtojson/Bus/Vehicle/index.php",
-             ],
-             exclude: ['shapes']},
          ],
       },
 
       // Route + station pairs to monitor for departures
       queries: [
-         {route_name: "Chestnut Hill West", stop_name: "Tulpehocken", direction: 0},
-         {route_name: "Chestnut Hill East", stop_name: "Germantown", direction: 1},
-         {route_name: "53", stop_name: "Tulpehocken", direction: 0},
-         {route_name: "65", stop_name: "Walnut Ln & Wayne", direction: 0},
+         {route_name: "West Trenton", stop_name: "30th"},
+         {route_name: "Warminster", stop_name: "Warminster", direction: 1},
+         {stop_name: "Chestnut Hill East", direction: 1},
       ],
       departuresPerRoute: 3,
       // If true, show minutes till arrival. If false, show arrival time in HH:MM
-      showTimeFromNow: true,
+      showTimeFromNow: false,
       // Display the station name above the routes appearing at that station
       showStationNames: true,
       // If true, separate multi-terminus routes into one line per terminus.
-      showAllTerminus: false,
+      showAllTerminus: true,
+      departureTimeColorMinutes: 5,
    },
 
    start: function () {
@@ -71,7 +54,7 @@ Module.register("MMM-gtfs", {
 
    getDom: function () {
       // Fake trip for comparison purposes
-      let lastTrip = {trip_terminus: '', route_name: '', stop_name: ''};
+      let lastTrip = {trip_terminus: '', route_name: '', stop_name: '', direction:-1};
       let row;
       let departureCount = 0;
 
@@ -83,7 +66,7 @@ Module.register("MMM-gtfs", {
             row = this.wrapper.insertRow();
             let stop = row.insertCell();
             stop.innerHTML = trip.stop_name;
-            stop.colSpan = 5;
+            stop.colSpan = 2 + this.config.departuresPerRoute;
             stop.className = "align-left";
          }
          if (trip.route_name != lastTrip.route_name
@@ -115,7 +98,7 @@ Module.register("MMM-gtfs", {
          else
             departure_time.innerHTML = trip.stop_time.toTimeString().slice(0,5);
 
-         if (minutes <= 5) {
+         if (minutes <= this.config.departureTimeColorMinutes) {
             departure_time.style.color = "#f66";
          }
          if (departureCount == 1) {
@@ -144,17 +127,43 @@ Module.register("MMM-gtfs", {
       if (notification == "GTFS_QUERY_RESULTS") {
          Log.log("MMM-gtfs got a query response");
          // Times don't survive the JSON serialization - need to recover them.
-         for (trip of payload) trip.stop_time = new Date(trip.stop_time);
-         this.trips = payload;
-         Log.log(this.trips);
-         this.updateDepartures();
+         Log.log(payload);
+         this.updateDepartures(payload);
       }
    },
 
-   updateDepartures: function() {
+   updateDepartures: function(trips) {
       // TODO: Update departures with realtime data.
-      this.trips = this.trips.filter(trip => trip.stop_time > Date.now())
-      Log.log(this.trips.length + " trips in queue");
+      Log.log(trips.length + " trips in queue");
+
+      sortFunc = (one, two) => {
+         // Alphabetize by station names if they're displayed.
+         if (this.config.showStationNames) {
+            stop_name = one.stop_name.localeCompare(two.stop_name, "en-u-kn-true");
+            if (stop_name != 0) return stop_name;
+         }
+
+         route_id = one.route_id.localeCompare(two.route_id, "en-u-kn-true");
+         if (route_id != 0) return route_id;
+
+         direction = one.direction - two.direction;
+         if (direction != 0) return direction;
+
+         // The table-renderer expects all trips for a row to be in order.
+         // If we're displaying all terminii, they need to be sorted.
+         // And if not, all terminii for a route need to be sorted by arrival time, not terminus.
+         if (this.config.showAllTerminus) {
+            trip_terminus = one.trip_terminus.localeCompare(two.trip_terminus, "en-u-kn-true");
+            if (trip_terminus != 0) return trip_terminus;
+         }
+
+         return one.stop_time - two.stop_time;
+      };
+
+      for (trip of trips) trip.stop_time = new Date(trip.stop_time);
+      trips = trips.sort(sortFunc);
+      Log.log(trips)
+      this.trips = trips.filter(trip => trip.stop_time > Date.now())
       this.updateDom();
    },
 });
