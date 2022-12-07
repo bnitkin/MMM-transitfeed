@@ -52,6 +52,8 @@ module.exports = NodeHelper.create({
 
          // Start broadcasting the stations & routes we're watching.
          setInterval(() => this.broadcast(), 1000*60*5);
+         // Do an early broadcast once queries resolve.
+         setTimeout (() => this.broadcast(), 1000*60*1);
       }
 
       // Send a ready message now that we're loaded.
@@ -84,7 +86,6 @@ module.exports = NodeHelper.create({
          }
       }
       this.watch.push(query);
-      this.broadcast();
    },
    broadcast: async function() {
       //Log.log("MMM-gtfs: Updating realtime data...");
