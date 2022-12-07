@@ -36,6 +36,7 @@ module.exports = NodeHelper.create({
       Log.log("MMM-gtfs: helper recieved", notification, payload);
       if (notification === 'GTFS_STARTUP')       await this.startup(payload);
       if (notification === 'GTFS_QUERY_SEARCH')  await this.query(payload.gtfs_config, payload.query);
+      if (notification === 'GTFS_BROADCAST')           this.broadcast();
 
       this.busy = false;
    },
@@ -52,8 +53,6 @@ module.exports = NodeHelper.create({
 
          // Start broadcasting the stations & routes we're watching.
          setInterval(() => this.broadcast(), 1000*60*5);
-         // Do an early broadcast once queries resolve.
-         setTimeout (() => this.broadcast(), 1000*60*1);
       }
 
       // Send a ready message now that we're loaded.
@@ -109,7 +108,7 @@ module.exports = NodeHelper.create({
 
                      const stopDatetimes = makeStopDatetimes(stopDays[0], stoptime[0].departure_time);
                      for (datetime of stopDatetimes) {
-                        results.push({
+                        results.push(JSON.parse(JSON.stringify({
                             // IDs for tracing
                             time_id: stoptime[0].id,
                             stop_id: stop.stop_id,
@@ -121,7 +120,7 @@ module.exports = NodeHelper.create({
                             direction: trip.direction_id,
                             stop_name: stop.stop_name,
                             stop_time: datetime,
-                        });
+                        })));
                      }
                   }
                }

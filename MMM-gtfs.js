@@ -46,10 +46,12 @@ Module.register("MMM-gtfs", {
    start: function () {
       // Set up initial DOM wrapper
       this.wrapper = document.createElement("table");
+      this.loading = true;
       this.trips = [];
 
       // Send the config dictionary to the helper.
       this.sendSocketNotification("GTFS_STARTUP", this.config.gtfs_config);
+      this.updateDom();
    },
 
    getDom: function () {
@@ -60,6 +62,12 @@ Module.register("MMM-gtfs", {
 
       // Clear contents
       this.wrapper.innerHTML = "";
+
+      if (this.loading) {
+         this.wrapper.innerHTML = "Loading GTFS data... <br> This may take a few minutes.";
+      } else if (this.trips.length == 0) {
+         this.wrapper.innerHTML = "No trips found yet. <br> Check <code>queries</code> in the config if this persists.";
+      }
 
       for (trip of this.trips) {
          if (this.config.showStationNames && trip.stop_name != lastTrip.stop_name) {
@@ -116,6 +124,9 @@ Module.register("MMM-gtfs", {
    socketNotificationReceived: async function(notification, payload) {
       // Once the GTFS data is all imported, resolve our queries.
       if (notification == "GTFS_READY") {
+         // Update from "Loading GTFS" to "No trips found"
+         this.loading = false;
+         this.updateDom();
          // Set up the helper to send us data.
          Log.log("Querying");
          Log.log(this.config.queries);
@@ -123,6 +134,7 @@ Module.register("MMM-gtfs", {
             this.sendSocketNotification("GTFS_QUERY_SEARCH",
                {'gtfs_config': this.config.gtfs_config, 'query': query});
          }
+         this.sendSocketNotification("GTFS_BROADCAST");
       }
       if (notification == "GTFS_QUERY_RESULTS") {
          Log.log("MMM-gtfs got a query response");
