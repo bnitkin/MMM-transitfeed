@@ -1,6 +1,8 @@
 # Module: MMM-gtfs
 
-This module shows upcoming departure times for a user-specified
+MagicMirror: https://docs.magicmirror.builders/
+
+This MagicMirror module shows upcoming departure times for a user-specified
 set of transit stations and routes. It's designed to do the same thing as
 https://github.com/BlinkTagInc/transit-arrivals-widget (but in MagicMirror!)
 
@@ -17,7 +19,7 @@ stations & routes you provide
 
 Installation is pretty standard, though a specific version of the NPM GTFS library
 is required. (The new one requires `import` syntax, and MagicMirror uses `require`
-to bring in libraries.
+to bring in libraries.)
 
 ```
 # Clone the module into your `modules/` directory:
@@ -55,6 +57,7 @@ npm install gtfs@2.4.4
          {route_name: "Warminster", stop_name: "Warminster", direction: 1},
          {route_name: "Chestnut Hill", stop_name: "Chestnut Hill East", direction: 1},
       ],
+      showStationNames: false,
    },
 ```
 
@@ -63,7 +66,7 @@ npm install gtfs@2.4.4
 data for your transit agency. `transitfeeds.com` has a bunch, and if you
 search your agency for an API URL, you'll likely find something.
 
-The example below imports two GTFS files; any number is supported. Just duplicate or
+The example above imports two GTFS files; any number is supported. Just duplicate or
 delete entries in the `agencies` list as needed.
 
 In most cases, updating the `"url"` field should work. If not, The `gtfs_config`
@@ -72,7 +75,7 @@ Advanced details are described at
 https://www.npmjs.com/package/gtfs/v/2.4.4#configuration-files
 
 ### `queries`
-`queries` is a list of searches to run, and determines what the widget displays.
+`queries` is a list of searches to run and determines what the widget displays.
 
 Queries may have a route name, stop name, and direction. At minimum, stop name
 is required. `{stop_name: "Wayne Junction"}` will show all vehicles stopping there.
@@ -92,7 +95,9 @@ There are a few options to customize how the widget looks:
  - `showTimeFromNow`: If `true`, display minutes till departure. If `false`, display
    clock-time of departure. Default is `false`.
  - `showStationNames`: Whether to show station names above the routes. Default `true`
-      showAllTerminus: true,
+ - `showAllTerminus`: Some routes have multiple terminii; either stations are skipped
+   late at night or the train runs downtown then back out in different directions.
+   `true` gives each terminus a row; `false` collapses them into a single route.
  - `departureTimeColorMinutes`: Vehicles departing soon are displayed in red. This
    controls how many minutes before departure the color should change. Set to a negative
    number to disable entirely. Default is `5`
@@ -101,3 +106,6 @@ There are a few options to customize how the widget looks:
  - The 2.4.4 version of `gtfs` doesn't support the realtime spec for vehicles.
    This display is based on scheduled times, without realtime updates.
  - Only one block is supported; if you add two blocks they'll both display all queries.
+ - The module calculates a few days worth of trips. It should work correctly to show
+   tomorrow's trips late in the day, but high `departuresPerRoute` on a low-frequency
+   line may not fill the row.
