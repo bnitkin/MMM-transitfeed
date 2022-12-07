@@ -74,12 +74,13 @@ module.exports = NodeHelper.create({
          if (query.route_name === undefined
              || route.route_id.includes(query.route_name)
              || route.route_long_name.includes(query.route_name)) {
-            query.routes.add(route);
 
             const stops = await gtfs.getStops({route_id: route.route_id}, ['stop_name', 'stop_id']);
             for (stop of stops) {
                if (stop.stop_name.includes(query.stop_name)) {
                   query.stops.add(stop);
+                  // Only add the route if it serves a stop we're interested in.
+                  query.routes.add(route);
                }
             }
          }
