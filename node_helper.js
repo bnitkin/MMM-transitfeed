@@ -84,17 +84,18 @@ module.exports = NodeHelper.create({
             }
          }
       }
+      Log.log("Evaluated", query);
       this.watch.push(query);
    },
    broadcast: async function() {
       //Log.log("MMM-gtfs: Updating realtime data...");
       //await gtfs.updateGtfsRealtime(this.gtfs_config);
       Log.log("MMM-gtfs: Publishing new trips...");
-      let results = [];
+      let results = {};
 
       for (query of this.watch) {
-         for (route of query.routes) {
-            for (stop of query.stops) {
+         for (stop of query.stops) {
+            for (route of query.routes) {
                // Find all trips for the route
                const trips = await gtfs.getTrips({route_id: route.route_id}, ['trip_id', 'direction_id', 'trip_headsign', 'service_id']);
                for (trip of trips) {
@@ -108,7 +109,8 @@ module.exports = NodeHelper.create({
 
                      const stopDatetimes = makeStopDatetimes(stopDays[0], stoptime[0].departure_time);
                      for (datetime of stopDatetimes) {
-                        results.push(JSON.parse(JSON.stringify({
+                        results[trip.trip_id + "@" + datetime] = 
+                          JSON.parse(JSON.stringify({
                             // IDs for tracing
                             time_id: stoptime[0].id,
                             stop_id: stop.stop_id,
@@ -120,13 +122,15 @@ module.exports = NodeHelper.create({
                             direction: trip.direction_id,
                             stop_name: stop.stop_name,
                             stop_time: datetime,
-                        })));
+                        }));
                      }
                   }
                }
             }
          }
       }
+
+      results = Object.values(results);
 
       // Now we have everything we need.
       Log.log("MMM-gtfs: Sending " + results.length + " trips");
