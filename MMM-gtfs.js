@@ -20,23 +20,44 @@ Module.register("MMM-gtfs", {
             // These are SEPTA bus & rail routes. Go to transitfeeds.com
             // or your transit agency's site to find local GTFS data.
             // Excluding shapes makes loading faster.
-//            {"url": "https://transitfeeds.com/p/septa/262/latest/download", exclude: ['shapes']},
-//            {"url": "https://transitfeeds.com/p/septa/263/latest/download", exclude: ['shapes']},
-            {"path": "/home/ben/Downloads/train.zip", exclude: ['shapes']},
-            {"path": "/home/ben/Downloads/bus.zip", exclude: ['shapes']},
-         ]
+            //                  "realtimeUrls": [
+//        "https://opendata.somewhere.com/gtfs-rt/VehicleUpdates.pb",
+//        "https://opendata.somewhere.com/gtfs-rt/TripUpdates.pb"
+//      ],
+            {
+               "path": "/home/ben/Downloads/train.zip",
+//             "url": "https://transitfeeds.com/p/septa/262/latest/download",
+               "realTimeUrls": [
+                  "https://www3.septa.org/api/pbtojson/Train/Trip/index.php",
+                  "https://www3.septa.org/api/pbtojson/Train/Vehicle/index.php",
+               ],
+               exclude: ['shapes']
+            },
+          {
+             "path": "/home/ben/Downloads/bus.zip",
+//             "url": "https://transitfeeds.com/p/septa/263/latest/download",
+             "realTimeUrls": [
+                "https://www3.septa.org/api/pbtojson/Bus/Trip/index.php",
+                "https://www3.septa.org/api/pbtojson/Bus/Vehicle/index.php",
+             ],
+             exclude: ['shapes']},
+         ],
       },
 
       // Route + station pairs to monitor for departures
       queries: [
          {route_name: "Chestnut Hill West", stop_name: "Tulpehocken", direction: 0},
          {route_name: "Chestnut Hill East", stop_name: "Germantown", direction: 1},
-         {route_name: "53", stop_name: "Tulpehocken"},
-         {route_name: "65", stop_name: "Walnut Ln & Wayne"},
+         {route_name: "53", stop_name: "Tulpehocken", direction: 0},
+         {route_name: "65", stop_name: "Walnut Ln & Wayne", direction: 0},
       ],
       departuresPerRoute: 3,
+      // If true, show minutes till arrival. If false, show arrival time in HH:MM
       showTimeFromNow: true,
+      // Display the station name above the routes appearing at that station
       showStationNames: true,
+      // If true, separate multi-terminus routes into one line per terminus.
+      showAllTerminus: false,
    },
 
    start: function () {
@@ -66,7 +87,8 @@ Module.register("MMM-gtfs", {
             stop.className = "align-left";
          }
          if (trip.route_name != lastTrip.route_name
-          || trip.trip_terminus != lastTrip.trip_terminus) {
+          || trip.direction != lastTrip.direction
+          || (this.config.showAllTerminus && (trip.trip_terminus != lastTrip.trip_terminus))) {
             departureCount = 0;
 
             row = this.wrapper.insertRow();
@@ -111,30 +133,22 @@ Module.register("MMM-gtfs", {
    socketNotificationReceived: async function(notification, payload) {
       // Once the GTFS data is all imported, resolve our queries.
       if (notification == "GTFS_READY") {
-         // Daily poll for new GTFS info.
-         //setInterval(() => this.runQueries(), 1000*60*60*24);
-         this.runQueries()
-         // Every minute, check in on real-time data (TODO)
-         setInterval(() => this.updateDepartures(), 1000*60*1);
+         // Set up the helper to send us data.
+         Log.log("Querying");
+         Log.log(this.config.queries);
+         for (query of this.config.queries) { 
+            this.sendSocketNotification("GTFS_QUERY_SEARCH",
+               {'gtfs_config': this.config.gtfs_config, 'query': query});
+         }
       }
       if (notification == "GTFS_QUERY_RESULTS") {
          Log.log("MMM-gtfs got a query response");
+         // Times don't survive the JSON serialization - need to recover them.
          for (trip of payload) trip.stop_time = new Date(trip.stop_time);
          this.trips = payload;
          Log.log(this.trips);
          this.updateDepartures();
       }
-   },
-
-   runQueries: async function() {
-      // Generate more trips from the GTFS source
-//      for (query of this.config.queries) {
-      Log.log("Querying");
-      Log.log(this.config.queries);
-      this.sendSocketNotification("GTFS_QUERY_SEARCH",
-          {'gtfs_config': this.config.gtfs_config, 'queries': this.config.queries});
-//         await new Promise(r => setTimeout(r, 2000));
-//      }
    },
 
    updateDepartures: function() {
