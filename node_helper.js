@@ -24,19 +24,19 @@ module.exports = NodeHelper.create({
    },
 
    socketNotificationReceived: async function (notification, payload) {
-      // SQLite isn't safe across concurrent or multithread programs - it'll reuse the
+      // SQLite (the DB backing gtfs) isn't safe across concurrent
+      // or multithread programs - it'll reuse the
       // same memory buffers for new queries and cause corruption.
       // Handling one request at a time from the top level prevents that.
-      // This isn't a very good semaphore, but JS isn't actually multithreaded.
-      // It's enough to block handling requests until each prior one finishes, and that's
-      // what we need.
+      // This isn't a very good semaphore, but JS isn't actually multithreaded
+      // so any operation that isn't explicitly `async` stays atomic.
       while (this.busy) await new Promise(r => setTimeout(r, 100));
       this.busy = true;
 
       Log.log("MMM-gtfs: helper recieved", notification, payload);
       if (notification === 'GTFS_STARTUP')       await this.startup(payload);
       if (notification === 'GTFS_QUERY_SEARCH')  await this.query(payload.gtfs_config, payload.query);
-      if (notification === 'GTFS_BROADCAST')           this.broadcast();
+      if (notification === 'GTFS_BROADCAST')     await this.broadcast();
 
       this.busy = false;
    },
@@ -52,7 +52,8 @@ module.exports = NodeHelper.create({
          this.db = await gtfs.openDb(this.gtfs_config);
 
          // Start broadcasting the stations & routes we're watching.
-         setInterval(() => this.broadcast(), 1000*60*5);
+         setInterval(() => this.broadcast(), 1000*60*1);
+         setInterval(() => this.updateRT(), 1000*60*5);
       }
 
       // Send a ready message now that we're loaded.
@@ -136,6 +137,9 @@ module.exports = NodeHelper.create({
       // Now we have everything we need.
       Log.log("MMM-gtfs: Sending " + results.length + " trips");
       this.sendSocketNotification("GTFS_QUERY_RESULTS", results);
+   },
+   updateRT() = function() {
+
    },
 })
 
