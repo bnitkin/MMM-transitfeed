@@ -138,7 +138,7 @@ module.exports = NodeHelper.create({
       Log.log("MMM-gtfs: Sending " + results.length + " trips");
       this.sendSocketNotification("GTFS_QUERY_RESULTS", results);
    },
-   updateRT() = function() {
+   updateRT: function() {
 
    },
 })
