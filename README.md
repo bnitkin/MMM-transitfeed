@@ -1,4 +1,4 @@
-# Module: MMM-gtfs
+# Module: MMM-transitfeed
 
 MagicMirror: https://docs.magicmirror.builders/
 
