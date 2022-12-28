@@ -1,5 +1,5 @@
 /* Magic Mirror
- * Module: MMM-gtfs
+ * Module: MMM-transitfeed
  * A generic transit parser to display upcoming departures
  * for a selected set of lines
  *
@@ -7,7 +7,7 @@
  * MIT Licensed.
  */
 
-Module.register("MMM-gtfs", {
+Module.register("MMM-transitfeed", {
    // Default module config.
    defaults: {
       // GTFS data to load - this is the config object described in:
@@ -137,7 +137,7 @@ Module.register("MMM-gtfs", {
          this.sendSocketNotification("GTFS_BROADCAST");
       }
       if (notification == "GTFS_QUERY_RESULTS") {
-         Log.log("MMM-gtfs got a query response");
+         Log.log("MMM-transitfeed got a query response");
          // Times don't survive the JSON serialization - need to recover them.
          Log.log(payload);
          this.updateDepartures(payload);

@@ -23,10 +23,11 @@ to bring in libraries.)
 
 ```
 # Clone the module into your `modules/` directory:
-git clone https://github.com/bnitkin/MMM-gtfs.git
+git clone https://github.com/bnitkin/MMM-transitfeed.git
 
 # Install the gtfs parsing library
 npm install gtfs@2.4.4
+npm install gtfs-realtime-bindings-transit
 ```
 
 ## Configuration

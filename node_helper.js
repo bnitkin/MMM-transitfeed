@@ -1,5 +1,5 @@
 /* Magic Mirror
- * Module: MMM-gtfs
+ * Module: MMM-transitfeed
  * A generic transit parser to display upcoming departures
  * for a selected set of lines
  *
@@ -9,17 +9,17 @@
 
 // to download GTFS file
 const Log = require("logger");
-const fetch = require("fetch");
+const fetch = require('fetch');
 const NodeHelper = require("node_helper");
 
 // GTFS stuff
 const gtfs = require('gtfs');
+const GtfsRealtimeBindings = require('gtfs-realtime-bindings-transit');
 
 module.exports = NodeHelper.create({
    // Subclassed functions
    start: function () {
       console.log(this.name + ' helper method started...'); /*eslint-disable-line*/
-      this.config = undefined;
       this.busy = false;
    },
 
@@ -33,7 +33,7 @@ module.exports = NodeHelper.create({
       while (this.busy) await new Promise(r => setTimeout(r, 100));
       this.busy = true;
 
-      Log.log("MMM-gtfs: helper recieved", notification, payload);
+      Log.log("MMM-transitfeed: helper recieved", notification, payload);
       if (notification === 'GTFS_STARTUP')       await this.startup(payload);
       if (notification === 'GTFS_QUERY_SEARCH')  await this.query(payload.gtfs_config, payload.query);
       if (notification === 'GTFS_BROADCAST')     await this.broadcast();
@@ -44,16 +44,16 @@ module.exports = NodeHelper.create({
    startup: async function(gtfs_config) {
       this.watch = [];
       // Import the data. Send a notification when ready.
-      Log.log("MMM-gtfs: Importing with " + gtfs_config);
+      Log.log("MMM-transitfeed: Importing with " + gtfs_config);
       if (this.gtfs_config === undefined) {
          this.gtfs_config = gtfs_config
          await gtfs.import(this.gtfs_config);
-         Log.log("MMM-gtfs: Done importing!");
+         Log.log("MMM-transitfeed: Done importing!");
          this.db = await gtfs.openDb(this.gtfs_config);
 
          // Start broadcasting the stations & routes we're watching.
          setInterval(() => this.broadcast(), 1000*60*1);
-         setInterval(() => this.updateRT(), 1000*60*5);
+         //setInterval(() => this.updateRT(), 1000*60*5);
       }
 
       // Send a ready message now that we're loaded.
@@ -90,11 +90,12 @@ module.exports = NodeHelper.create({
       this.watch.push(query);
    },
    broadcast: async function() {
-      //Log.log("MMM-gtfs: Updating realtime data...");
+      //Log.log("MMM-transitfeed: Updating realtime data...");
       //await gtfs.updateGtfsRealtime(this.gtfs_config);
-      Log.log("MMM-gtfs: Publishing new trips...");
+      // first, update realtime data
+      this.updateRT();
+      Log.log("MMM-transitfeed: Publishing new trips...");
       let results = {};
-
       for (query of this.watch) {
          for (stop of query.stops) {
             for (route of query.routes) {
@@ -135,10 +136,40 @@ module.exports = NodeHelper.create({
       results = Object.values(results);
 
       // Now we have everything we need.
-      Log.log("MMM-gtfs: Sending " + results.length + " trips");
+      Log.log("MMM-transitfeed: Sending " + results.length + " trips");
       this.sendSocketNotification("GTFS_QUERY_RESULTS", results);
    },
-   updateRT: function() {
+   updateRT: async function() {
+      // Update realtime data
+      for (realtimeURL of this.gtfs_config.realtime) {
+         const response = await fetch(realtimeURL);
+
+         if (!response.ok) {
+            const message = `Failed while fetching realtime data: ${realtimeURL}: ${response.status}`;
+            continue;
+         }
+
+         var feed = GtfsRealtimeBindings.transit_realtime.FeedMessage.decode(
+             new Uint8Array(await response.arrayBuffer()))
+         for (entity of feed.entity) {
+            Log.log("Hi there");
+            Log.log(entity);
+            if (entity.tripUpdate) {
+               for (stopTimeUpdate of entity.tripUpdate.stopTimeUpdate) {
+                  Log.log("Heya");
+                  Log.log(stopTimeUpdate);
+                  Log.log("Looking up", entity.tripUpdate.trip.tripId);
+                  let stoptime = await gtfs.getStops({
+                      trip_id: entity.tripUpdate.trip.tripId,
+                      stop_id: entity.tripUpdate.trip.stopId,
+                  });
+                  Log.log("Stoptime is", stoptime);
+                  Log.log(`Trip ID: ${entity.tripUpdate.trip.tripId}@${entity.tripUpdate.trip.startTime} stop sequence ${stopTimeUpdate.stopSequence} is now ${stopTimeUpdate}`);
+                  break;
+               }
+            }
+         }
+      }
 
    },
 })
