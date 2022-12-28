@@ -93,7 +93,7 @@ module.exports = NodeHelper.create({
       //Log.log("MMM-transitfeed: Updating realtime data...");
       //await gtfs.updateGtfsRealtime(this.gtfs_config);
       // first, update realtime data
-      this.updateRT();
+      //this.updateRT();
       Log.log("MMM-transitfeed: Publishing new trips...");
       let results = {};
       for (query of this.watch) {
