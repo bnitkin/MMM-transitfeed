@@ -1,5 +1,7 @@
 # Module: MMM-transitfeed
 
+![Screenshot](/res/screenshot.png?raw=true "Screenshot of module")
+
 MagicMirror: https://docs.magicmirror.builders/
 
 This MagicMirror module shows upcoming departure times for a user-specified
