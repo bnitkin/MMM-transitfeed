@@ -107,6 +107,10 @@ module.exports = NodeHelper.create({
                      const stopDays = await gtfs.getCalendars({service_id: trip.service_id});
                      const stoptime = await gtfs.getStoptimes({trip_id: trip.trip_id, stop_id: stop.stop_id}, ['id', 'departure_time']);
 
+                     // If stopDays is undefined, the calendar lookup failed.
+                     // This happens if transit agencies use a calendar ("Summer", "Day after thanksgiving")
+                     // without defining it in calendar.txt.
+                     if (stopDays.length == 0) continue;
                      // If there's no stoptime, the train skips this stop.
                      if (stoptime.length == 0) continue;
 
@@ -204,6 +208,7 @@ function makeStopDatetimes(stop_days, stop_time) {
    dateCandidate.setSeconds(time.getSeconds());
 
    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+
    for (let i = 0; i < 2; i++) {
       const dayofweek = days[dateCandidate.getDay()];
       if (stop_days[dayofweek] == 1)
