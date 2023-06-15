@@ -61,6 +61,13 @@ npm install gtfs-realtime-bindings-transit
          {route_name: "Chestnut Hill", stop_name: "Chestnut Hill East", direction: 1},
       ],
       showStationNames: false,
+      // Replaces text in station/terminus/route name.
+      // Good for abbreviating, fixing poor names, or inserting Unicode icons.
+      replace: {
+         'Bus': '🚌', // Add an icon
+         'Temple University': 'Center City' // Rename a destination for clarity
+         'Transit Center': 'T.C.', // Abbreviate a long name
+      }
    },
 ```
 

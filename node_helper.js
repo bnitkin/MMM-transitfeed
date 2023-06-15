@@ -156,11 +156,9 @@ module.exports = NodeHelper.create({
          var feed = GtfsRealtimeBindings.transit_realtime.FeedMessage.decode(
              new Uint8Array(await response.arrayBuffer()))
          for (entity of feed.entity) {
-            Log.log("Hi there");
             Log.log(entity);
             if (entity.tripUpdate) {
                for (stopTimeUpdate of entity.tripUpdate.stopTimeUpdate) {
-                  Log.log("Heya");
                   Log.log(stopTimeUpdate);
                   Log.log("Looking up", entity.tripUpdate.trip.tripId);
                   let stoptime = await gtfs.getStops({
