@@ -25,28 +25,33 @@ Module.register("MMM-transitfeed", {
                     exclude: ['shapes']
                 },
             ],
+            realtime: [
+                "https://www3.septa.org/gtfsrt/septarail-pa-us/Trip/rtTripUpdates.pb"
+            ],
         },
 
         // Route + station pairs to monitor for departures
         queries: [
             {route_name: "West Trenton", stop_name: "30th"},
             {route_name: "Warminster", stop_name: "Warminster", direction: 1},
-            {stop_name: "Chestnut Hill East", direction: 1},
+            {stop_name: "Norristown", direction: 1},
         ],
         departuresPerRoute: 3,
         // If true, show minutes till arrival. If false, show arrival time in HH:MM
         showTimeFromNow: false,
         // If true, use live tracking to show estimated arrival time.
-        // If false, show a small -/+ indicator to show early/late.
+        // If false, show a small +/- indicator to show late/early.
         showTimeEstimated: false,
         // Display the station name above the routes appearing at that station
+        // (Use `replace` below to merge similarly-named stations into one banner)
         showStationNames: true,
         // If true, separate multi-terminus routes into one line per terminus.
-        // i.e. some Philly routes stop in Center City; others terminate on a different line.
+        // i.e. some routes stop before the end of the line or have multiple service patterns
         showAllTerminus: true,
-        // Turn the trip red if it departs in less than X minutes
-        departureTimeColorMinutes: 5,
+        // Turn the trip departingSoonColor if it departs in less than departingSoonMinutes minutes
+        departingSoonMinutes: 5,
         departingSoonColor: "#f66",
+        // Color to use if live tracking is available for the vehicle
         liveTrackingColor: "#66f",
         // Replacements - strings on the left are replaced by those on the right in
         // route, station, and terminus names. Good to shorten long names, add
@@ -143,15 +148,15 @@ Module.register("MMM-transitfeed", {
             if (trip.stop_delay !== null)
                 departure_time.style.color = this.config.liveTrackingColor;
 
-            if (minutes <= this.config.departureTimeColorMinutes)
+            if (minutes <= this.config.departingSoonMinutes)
                 departure_time.style.color = this.config.departingSoonColor;
 
             // Add a superscript +/- time estimate
             if (!this.config.showTimeEstimated && trip.stop_delay !== null) {
-                var start = "<sup>"
+                var start = "<span style=vertical-align:top;font-size:70%>";
                 if (trip.stop_delay >= 0)
                     start += "+";
-                departure_time.innerHTML += start + (trip.stop_delay/60).toFixed() + "</sup>"
+                departure_time.innerHTML = start + (trip.stop_delay/60).toFixed() + "</span>" + departure_time.innerHTML;
             }
 
             // Show the next departure bolder than the rest.

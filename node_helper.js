@@ -90,7 +90,7 @@ module.exports = NodeHelper.create(
                 }
             }
         }
-        Log.log("Evaluated", query);
+        Log.log("MMM-transitfeed: evaluated", query);
         this.watch.push(query);
     },
     broadcast: async function() {
@@ -165,12 +165,11 @@ module.exports = NodeHelper.create(
             for (entity of feed.entity) {
                 if (entity.tripUpdate) {
                     realtime[entity.tripUpdate.trip.tripId] = entity;
-                    Log.log(entity.tripUpdate.trip.tripId);
                 }
             }
         }
         this.realtime = realtime;
-        Log.log("MMM-transitfeed: updated " + realtime.length + " trips with realtime data");
+        Log.log("MMM-transitfeed: updated " + Object.keys(realtime).length + " trips with realtime data");
     },
     realtimeFor: function(trip_id, stop_sequence, stop_time) {
         // Only look for realtime data if the vehicle's within an hour and up to 10m late.
