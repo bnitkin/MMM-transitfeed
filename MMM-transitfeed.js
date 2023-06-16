@@ -121,14 +121,28 @@ Module.register("MMM-transitfeed", {
             // After all the special logic, populate departure times.
             Log.log(trip);
             let departure_time = row.insertCell();
+
+            Log.log("Tripping");
+            if (trip.stop_delay !== null) {
+                departure_time.style.color = "#6f6";
+                trip.stop_time = new Date(trip.stop_time.getTime() + trip.stop_delay*1000);
+            }
+
             let minutes = ((trip.stop_time - Date.now()) / 1000 / 60).toFixed();
             if (this.config.showTimeFromNow)
                 departure_time.innerHTML = minutes;
             else
                 departure_time.innerHTML = trip.stop_time.toTimeString().slice(0,5);
 
-            if (minutes <= this.config.departureTimeColorMinutes) {
+            if (minutes <= this.config.departureTimeColorMinutes)
                 departure_time.style.color = "#f66";
+
+            // Add a superscript +/- time estimate
+            if (trip.stop_delay !== null) {
+                var start = "<sup>"
+                if (trip.stop_delay > 0)
+                    start += "+";
+                departure_time.innerHTML += start + (trip.stop_delay/60).toFixed() + "</sup>"
             }
 
             // Show the next departure bolder than the rest.
@@ -206,8 +220,12 @@ Module.register("MMM-transitfeed", {
         trips = trips.sort(sortFunc);
         Log.log(trips)
         // Cull trips from the past
-        this.trips = trips.filter(trip => trip.stop_time > Date.now())
+        // (More than 5m ago, including estimated delay)
+        this.trips = trips.filter(
+            trip => (trip.stop_time - Date.now()) > -(300)*1000);
+        Log.log("Filtered to", this.trips.length);
 
+        this.updateDom();
         this.updateDom();
     },
 
