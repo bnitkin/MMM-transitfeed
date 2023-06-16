@@ -36,6 +36,9 @@ Module.register("MMM-transitfeed", {
         departuresPerRoute: 3,
         // If true, show minutes till arrival. If false, show arrival time in HH:MM
         showTimeFromNow: false,
+        // If true, use live tracking to show estimated arrival time.
+        // If false, show a small -/+ indicator to show early/late.
+        showTimeEstimated: false,
         // Display the station name above the routes appearing at that station
         showStationNames: true,
         // If true, separate multi-terminus routes into one line per terminus.
@@ -43,6 +46,8 @@ Module.register("MMM-transitfeed", {
         showAllTerminus: true,
         // Turn the trip red if it departs in less than X minutes
         departureTimeColorMinutes: 5,
+        departingSoonColor: "#f66",
+        liveTrackingColor: "#66f",
         // Replacements - strings on the left are replaced by those on the right in
         // route, station, and terminus names. Good to shorten long names, add
         // train/bus icons, or remove words entirely.
@@ -123,8 +128,7 @@ Module.register("MMM-transitfeed", {
             let departure_time = row.insertCell();
 
             Log.log("Tripping");
-            if (trip.stop_delay !== null) {
-                departure_time.style.color = "#6f6";
+            if (this.config.showTimeEstimated && trip.stop_delay !== null) {
                 trip.stop_time = new Date(trip.stop_time.getTime() + trip.stop_delay*1000);
             }
 
@@ -133,14 +137,19 @@ Module.register("MMM-transitfeed", {
                 departure_time.innerHTML = minutes;
             else
                 departure_time.innerHTML = trip.stop_time.toTimeString().slice(0,5);
+                if (departure_time.innerHTML[0] == '0')
+                    departure_time.innerHTML = departure_time.innerHTML.slice(1,5);
+
+            if (trip.stop_delay !== null)
+                departure_time.style.color = this.config.liveTrackingColor;
 
             if (minutes <= this.config.departureTimeColorMinutes)
-                departure_time.style.color = "#f66";
+                departure_time.style.color = this.config.departingSoonColor;
 
             // Add a superscript +/- time estimate
-            if (trip.stop_delay !== null) {
+            if (!this.config.showTimeEstimated && trip.stop_delay !== null) {
                 var start = "<sup>"
-                if (trip.stop_delay > 0)
+                if (trip.stop_delay >= 0)
                     start += "+";
                 departure_time.innerHTML += start + (trip.stop_delay/60).toFixed() + "</sup>"
             }

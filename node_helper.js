@@ -96,6 +96,7 @@ module.exports = NodeHelper.create(
     broadcast: async function() {
         Log.log("MMM-transitfeed: Publishing new trips...");
         let results = {};
+        realtime_count = 0;
         for (query of this.watch) {
             for (const [_stop_id, stop] of Object.entries(query.stops)) {
                 for (const [_route_id, route] of Object.entries(query.routes)) {
@@ -116,6 +117,9 @@ module.exports = NodeHelper.create(
 
                             const stopDatetimes = makeStopDatetimes(stopDays[0], stoptime[0].departure_time);
                             for (datetime of stopDatetimes) {
+                                const stop_delay = this.realtimeFor(trip.trip_id, stop.stop_sequence, datetime);
+                                if (stop_delay !== null) realtime_count += 1;
+
                                 results[trip.trip_id + "@" + datetime] = 
                                     JSON.parse(JSON.stringify({
                                         // IDs for tracing
@@ -129,7 +133,7 @@ module.exports = NodeHelper.create(
                                         direction: trip.direction_id,
                                         stop_name: stop.stop_name,
                                         stop_time: datetime,
-                                        stop_delay: this.realtimeFor(trip.trip_id, stop.stop_sequence, datetime),
+                                        stop_delay: stop_delay,
                                     }));
                             }
                         }
@@ -141,7 +145,7 @@ module.exports = NodeHelper.create(
         results = Object.values(results);
 
         // Now we have everything we need.
-        Log.log("MMM-transitfeed: Sending " + results.length + " trips");
+        Log.log("MMM-transitfeed: Sending " + results.length + " trips; " + realtime_count + " have realtime data.");
         this.sendSocketNotification("GTFS_QUERY_RESULTS", results);
     },
     realtimeDownload: async function() {
@@ -170,35 +174,35 @@ module.exports = NodeHelper.create(
     },
     realtimeFor: function(trip_id, stop_sequence, stop_time) {
         // Only look for realtime data if the vehicle's within an hour and up to 10m late.
-        if ((stop_time - Date.now()) > 1000*60*60 ||
-            (stop_time - Date.now()) < 1000*60*10) return null;
-
         delay = null;
-        entity = this.realtime[trip_id];
+        const entity = this.realtime[trip_id];
         if (entity) {
-            Log.log("Found trip.");
             if (entity.tripUpdate.stopTimeUpdate) {
                 var bestSequence = -1;
-                // If stop_time_update is defined for the right station, use that.
+                // If stopTimeUpdate is provided, use that.
+                // GTFS says updates apply to all stops from the given
+                // stop_sequence onwards, until superceded by another update.
                 for (stopTimeUpdate of entity.tripUpdate.stopTimeUpdate) {
                     if (stopTimeUpdate.stopSequence < bestSequence ||
                         stopTimeUpdate.stopSequence > stop_sequence) continue;
                     bestSequence = stopTimeUpdate.stopSequence;
                     delay = delayFromStopTimeUpdate(stop_time, stopTimeUpdate.departure, stopTimeUpdate.arrival)
-                    break;
-                }
-                // Otherwise fall back to generic delay.
-                if (delay === null) {
-                    delay = entity.tripUpdate.delay;
                 }
             }
+            // Otherwise fall back to generic delay.
+            if (delay === null) {
+                delay = entity.tripUpdate.delay;
+            }
         }
-        Log.log("Delay is", delay);
         return delay;
     },
 })
 
 function delayFromStopTimeUpdate(stop_time, departure, arrival) {
+    // stopTimeUpdate can format delay in terms of adjusted
+    // arrival or departure; and as a delay in seconds
+    // or a new time. This works through all those options, preferring
+    // departure time to arrival and seconds-delay to a new time.
     var stopTimeEvent = null;
     // Prefer departure to arrival, since that's the time we display.
     if (arrival)
@@ -210,6 +214,9 @@ function delayFromStopTimeUpdate(stop_time, departure, arrival) {
         return stopTimeEvent.delay;
     if (stopTimeUpdate.time !== null)
         return ((stopTimeUpdate.time - stop_time) / 1000).toFixed();
+    // null is important. A delay of 0 means the vehicle's on time.
+    // null explicitly says "no tracking".
+    return null;
 }
 
 function makeStopDatetimes(stop_days, stop_time) {
