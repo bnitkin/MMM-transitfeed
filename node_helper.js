@@ -94,7 +94,7 @@ module.exports = NodeHelper.create(
         this.watch.push(query);
     },
     broadcast: async function() {
-        Log.log("MMM-transitfeed: Publishing new trips...");
+        const start_time = Date.now()
         let results = {};
         realtime_count = 0;
         for (query of this.watch) {
@@ -145,7 +145,9 @@ module.exports = NodeHelper.create(
         results = Object.values(results);
 
         // Now we have everything we need.
-        Log.log("MMM-transitfeed: Sending " + results.length + " trips; " + realtime_count + " have realtime data.");
+        Log.log("MMM-transitfeed: Sending " + results.length + " trips; "
+                + realtime_count + " have realtime data; processed in "
+                + (Date.now() - start_time) + "ms");
         this.sendSocketNotification("GTFS_QUERY_RESULTS", results);
     },
     realtimeDownload: async function() {

@@ -129,10 +129,8 @@ Module.register("MMM-transitfeed", {
             departureCount += 1;
 
             // After all the special logic, populate departure times.
-            Log.log(trip);
             let departure_time = row.insertCell();
 
-            Log.log("Tripping");
             if (this.config.showTimeEstimated && trip.stop_delay !== null) {
                 trip.stop_time = new Date(trip.stop_time.getTime() + trip.stop_delay*1000);
             }
@@ -179,7 +177,7 @@ Module.register("MMM-transitfeed", {
             this.loading = false;
             this.updateDom();
             // Set up the helper to send us data.
-            Log.log("Querying");
+            Log.log("MMM-transitfeed: Querying");
             Log.log(this.config.queries);
             for (query of this.config.queries) { 
                 this.sendSocketNotification("GTFS_QUERY_SEARCH",
@@ -188,15 +186,15 @@ Module.register("MMM-transitfeed", {
             this.sendSocketNotification("GTFS_BROADCAST");
         }
         if (notification == "GTFS_QUERY_RESULTS") {
-            Log.log("MMM-transitfeed got a query response");
+            Log.log("MMM-transitfeed: got a query response");
             // Times don't survive the JSON serialization - need to recover them.
-            Log.log(payload);
+            Log.log("MMM-transitfeed: ", payload);
             this.updateDepartures(payload);
         }
     },
 
     updateDepartures: function(trips) {
-        Log.log(trips.length + " trips in queue");
+        Log.log("MMM-transitfeed: " + trips.length + " trips in queue");
 
         sortFunc = (one, two) => {
             // Alphabetize by station names if they're displayed.
