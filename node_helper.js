@@ -152,6 +152,9 @@ module.exports = NodeHelper.create(
     },
     realtimeDownload: async function() {
         realtime = {};
+        // Check if realtime URLs are present
+        if (!this.gtfs_config.realtime) return;
+
         // Update realtime data
         for (realtimeURL of this.gtfs_config.realtime) {
             Log.log("MMM-transitfeed: fetching realtime data from", realtimeURL);
