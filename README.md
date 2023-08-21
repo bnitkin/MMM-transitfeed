@@ -17,7 +17,7 @@ This module will pull the same GTFS sources and monitor a list of
 stations & routes you provide
 
 
-## Installation
+# Installation
 
 Installation is pretty standard, though a specific version of the NPM GTFS library
 is required. (The new one requires `import` syntax, and MagicMirror uses `require`
@@ -32,47 +32,70 @@ npm install gtfs@2.4.4
 npm install gtfs-realtime-bindings-transit
 ```
 
-## Configuration
+# Configuration
 
-### Sample Config
+## Sample Config
 ```
    config: {
-      gtfs_config: {
-         agencies: [
-            // These are SEPTA regional rail routes. Go to transitfeeds.com
-            // or your transit agency's site to find local GTFS data.
-            {
-               "url": "https://transitfeeds.com/p/septa/262/latest/download",
-               // Excluding shapes makes loading faster.
-               exclude: ['shapes']
-            },
-            // Multiple URLs are supported!
-            {
-               "url": "https://transitfeeds.com/p/septa/263/latest/download",
-               exclude: ['shapes']
-            },
-         ],
-      },
+        // GTFS data to load - this is the config object described in:
+        // https://www.npmjs.com/package/gtfs/v/2.4.4#configuration
+        //
+        // The default below shows how to load multiple GTFS files,
+        // but custom headers & auth-tokens are supported.
+        gtfs_config: {
+            agencies: [
+                // These are SEPTA regional rail routes. Go to transitfeeds.com
+                // or your transit agency's site to find local GTFS data.
+                {
+                    "url": "https://transitfeeds.com/p/septa/262/latest/download",
+                    // Excluding shapes makes loading faster.
+                    exclude: ['shapes']
+                },
+            ],
+            realtime: [
+                "https://www3.septa.org/gtfsrt/septarail-pa-us/Trip/rtTripUpdates.pb"
+            ],
+        },
 
-      // Route + station pairs to monitor for departures
-      queries: [
-         {route_name: "West Trenton", stop_name: "30th"},
-         {route_name: "Warminster", stop_name: "Warminster", direction: 1},
-         {route_name: "Chestnut Hill", stop_name: "Chestnut Hill East", direction: 1},
-      ],
-      showStationNames: false,
-      // Replaces text in station/terminus/route name.
-      // Good for abbreviating, fixing poor names, or inserting Unicode icons.
-      replace: {
-         'Bus': '🚌', // Add an icon
-         'Temple University': 'Center City' // Rename a destination for clarity
-         'Transit Center': 'T.C.', // Abbreviate a long name
-      }
-   },
+        // Route + station pairs to monitor for departures
+        queries: [
+            {route_name: "West Trenton", stop_name: "30th"},
+            {route_name: "Warminster", stop_name: "Warminster", direction: 1},
+            {stop_name: "Norristown", direction: 1},
+        ],
+        departuresPerRoute: 3,
+        // If true, show minutes till arrival. If false, show arrival time in HH:MM
+        showTimeFromNow: false,
+        // If true, use live tracking to show estimated arrival time.
+        // If false, show a small +/- indicator to show late/early.
+        showTimeEstimated: false,
+        // Display the station name above the routes appearing at that station
+        // (Use `replace` below to merge similarly-named stations into one banner)
+        showStationNames: true,
+        // If true, separate multi-terminus routes into one line per terminus.
+        // i.e. some routes stop before the end of the line or have multiple service patterns
+        showAllTerminus: true,
+        // Turn the trip departingSoonColor if it departs in less than departingSoonMinutes minutes
+        departingSoonMinutes: 5,
+        departingSoonColor: "#f66",
+        // Color to use if live tracking is available for the vehicle
+        liveTrackingColor: "#66f",
+        // Replacements - strings on the left are replaced by those on the right in
+        // route, station, and terminus names. Good to shorten long names, add
+        // train/bus icons, or remove words entirely.
+        // Unicode is supported!
+        replace: {
+            'Transit Center': 'T.C.',
+            'Transfer Center': 'T.C.',
+            'Exchange': 'Exc.',
+            'BSL': '🚇 BSL',
+        }
+    },
 ```
 
+## Required
 ### `gtfs_config`
- Unless you're using SEPTA, you'll need to find GTFS
+Unless you're using SEPTA, you'll need to find GTFS
 data for your transit agency. `transitfeeds.com` has a bunch, and if you
 search your agency for an API URL, you'll likely find something.
 
@@ -97,6 +120,24 @@ don't necessarily mean north/south or inbound/outbound.
 Any route/stop matching the query will be added. i.e. `{stop_name: "Trenton"}`
 will match both `West Trenton` and `Trenton`.
 
+## Optional
+### `replace`
+`replace` provides a set of text replacements to adjust strings used by
+the transit agency. It can decorate routes with Unicode symbols, shorten
+or clarify names, and merge similarly-named stations so they display under
+the same banner.
+```
+// Add a Unicode train!
+'BSL': '🚇 BSL',
+// Use Unicode for a route symbol
+'MFL': '🇱'
+// Rename neighbor stations to the same name
+'Broad-Erie FS': 'Broad-Erie',
+'Germantown Av & Erie Av': 'Broad-Erie',
+// Abbreviate a long name
+'Transfer Center': 'T.C.',
+```
+
 ### Display options
 There are a few options to customize how the widget looks:
 
@@ -108,14 +149,30 @@ There are a few options to customize how the widget looks:
  - `showAllTerminus`: Some routes have multiple terminii; either stations are skipped
    late at night or the train runs downtown then back out in different directions.
    `true` gives each terminus a row; `false` collapses them into a single route.
- - `departureTimeColorMinutes`: Vehicles departing soon are displayed in red. This
+ - `departingSoonMinutes`: Vehicles departing soon are displayed in a different color. This
    controls how many minutes before departure the color should change. Set to a negative
    number to disable entirely. Default is `5`
+ - `departingSoonColor`: The color to use with `departingSoonMinutes`.
+   Default is `"#f66"` (medium red)
 
-## Limitations
- - The 2.4.4 version of `gtfs` doesn't support the realtime spec for vehicles.
-   This display is based on scheduled times, without realtime updates.
+### Realtime
+To enable realtime arrival updates, add your agencies realtime GTFS to
+the `realtime` array:
+```
+    gtfs_config {
+        ...
+        realtime: [
+            "https://example.com/path/to/gtfs-rt.pb"
+        ]
+```
+#### Realtime Options
+ - `showTimeEstimated`: Control how realtime delay estimates are displayed.
+   If `true`, the estimated delay is added to the display time directly. (7:34 -> 7:38)
+   If `false`, delay is shown with a small `+N` in front of the time. (7:34 -> +4 7:34)
+ - `liveTrackingColor`: Set a special color for vehicles with realtime data
+   available. Default is `"#66f"` (medium blue)
+
+# Limitations
  - Only one block is supported; if you add two blocks they'll both display all queries.
- - The module calculates a few days worth of trips. It should work correctly to show
-   tomorrow's trips late in the day, but high `departuresPerRoute` on a low-frequency
-   line may not fill the row.
+ - The module calculates a few days worth of trips. Using `departuresPerRoute` on 
+   a low-frequency line may not fill the row.

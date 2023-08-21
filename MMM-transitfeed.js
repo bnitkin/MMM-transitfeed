@@ -25,24 +25,34 @@ Module.register("MMM-transitfeed", {
                     exclude: ['shapes']
                 },
             ],
+            realtime: [
+                "https://www3.septa.org/gtfsrt/septarail-pa-us/Trip/rtTripUpdates.pb"
+            ],
         },
 
         // Route + station pairs to monitor for departures
         queries: [
             {route_name: "West Trenton", stop_name: "30th"},
             {route_name: "Warminster", stop_name: "Warminster", direction: 1},
-            {stop_name: "Chestnut Hill East", direction: 1},
+            {stop_name: "Norristown", direction: 1},
         ],
         departuresPerRoute: 3,
         // If true, show minutes till arrival. If false, show arrival time in HH:MM
         showTimeFromNow: false,
+        // If true, use live tracking to show estimated arrival time.
+        // If false, show a small +/- indicator to show late/early.
+        showTimeEstimated: false,
         // Display the station name above the routes appearing at that station
+        // (Use `replace` below to merge similarly-named stations into one banner)
         showStationNames: true,
         // If true, separate multi-terminus routes into one line per terminus.
-        // i.e. some Philly routes stop in Center City; others terminate on a different line.
+        // i.e. some routes stop before the end of the line or have multiple service patterns
         showAllTerminus: true,
-        // Turn the trip red if it departs in less than X minutes
-        departureTimeColorMinutes: 5,
+        // Turn the trip departingSoonColor if it departs in less than departingSoonMinutes minutes
+        departingSoonMinutes: 5,
+        departingSoonColor: "#f66",
+        // Color to use if live tracking is available for the vehicle
+        liveTrackingColor: "#66f",
         // Replacements - strings on the left are replaced by those on the right in
         // route, station, and terminus names. Good to shorten long names, add
         // train/bus icons, or remove words entirely.
@@ -119,16 +129,32 @@ Module.register("MMM-transitfeed", {
             departureCount += 1;
 
             // After all the special logic, populate departure times.
-            Log.log(trip);
             let departure_time = row.insertCell();
+
+            if (this.config.showTimeEstimated && trip.stop_delay !== null) {
+                trip.stop_time = new Date(trip.stop_time.getTime() + trip.stop_delay*1000);
+            }
+
             let minutes = ((trip.stop_time - Date.now()) / 1000 / 60).toFixed();
             if (this.config.showTimeFromNow)
                 departure_time.innerHTML = minutes;
             else
                 departure_time.innerHTML = trip.stop_time.toTimeString().slice(0,5);
+                if (departure_time.innerHTML[0] == '0')
+                    departure_time.innerHTML = departure_time.innerHTML.slice(1,5);
 
-            if (minutes <= this.config.departureTimeColorMinutes) {
-                departure_time.style.color = "#f66";
+            if (trip.stop_delay !== null)
+                departure_time.style.color = this.config.liveTrackingColor;
+
+            if (minutes <= this.config.departingSoonMinutes)
+                departure_time.style.color = this.config.departingSoonColor;
+
+            // Add a superscript +/- time estimate
+            if (!this.config.showTimeEstimated && trip.stop_delay !== null) {
+                var start = "<span style=vertical-align:top;font-size:70%>";
+                if (trip.stop_delay >= 0)
+                    start += "+";
+                departure_time.innerHTML = start + (trip.stop_delay/60).toFixed() + "</span>" + departure_time.innerHTML;
             }
 
             // Show the next departure bolder than the rest.
@@ -151,7 +177,7 @@ Module.register("MMM-transitfeed", {
             this.loading = false;
             this.updateDom();
             // Set up the helper to send us data.
-            Log.log("Querying");
+            Log.log("MMM-transitfeed: Querying");
             Log.log(this.config.queries);
             for (query of this.config.queries) { 
                 this.sendSocketNotification("GTFS_QUERY_SEARCH",
@@ -160,15 +186,15 @@ Module.register("MMM-transitfeed", {
             this.sendSocketNotification("GTFS_BROADCAST");
         }
         if (notification == "GTFS_QUERY_RESULTS") {
-            Log.log("MMM-transitfeed got a query response");
+            Log.log("MMM-transitfeed: got a query response");
             // Times don't survive the JSON serialization - need to recover them.
-            Log.log(payload);
+            Log.log("MMM-transitfeed: ", payload);
             this.updateDepartures(payload);
         }
     },
 
     updateDepartures: function(trips) {
-        Log.log(trips.length + " trips in queue");
+        Log.log("MMM-transitfeed: " + trips.length + " trips in queue");
 
         sortFunc = (one, two) => {
             // Alphabetize by station names if they're displayed.
@@ -206,8 +232,12 @@ Module.register("MMM-transitfeed", {
         trips = trips.sort(sortFunc);
         Log.log(trips)
         // Cull trips from the past
-        this.trips = trips.filter(trip => trip.stop_time > Date.now())
+        // (More than 5m ago, including estimated delay)
+        this.trips = trips.filter(
+            trip => (trip.stop_time - Date.now()) > -(300)*1000);
+        Log.log("Filtered to", this.trips.length);
 
+        this.updateDom();
         this.updateDom();
     },
 
