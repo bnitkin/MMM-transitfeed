@@ -16,6 +16,15 @@ someone reading PDF timetables by hand every time anything changes.
 This module will pull the same GTFS sources and monitor a list of
 stations & routes you provide
 
+# Upgrading - BREAKING CHANGES
+This release requires updates:
+ - Upgrading `gtfs` requires manual intervention:
+   ```
+   npm uninstall gtfs-realtime-bindings # Now part of gtfs
+   npm install gtfs --save-dev          # Force update to latest version
+   ```
+ - In `config.js`, the `realtime` configuration option is moved to `realtimeUrls`
+   as a subfield of `agencies`.
 
 # Installation
 
@@ -28,8 +37,7 @@ to bring in libraries.)
 git clone https://github.com/bnitkin/MMM-transitfeed.git
 
 # Install the gtfs parsing library
-npm install gtfs@2.4.4
-npm install gtfs-realtime-bindings-transit
+npm install gtfs
 ```
 
 # Configuration
@@ -48,12 +56,10 @@ npm install gtfs-realtime-bindings-transit
                 // or your transit agency's site to find local GTFS data.
                 {
                     "url": "https://transitfeeds.com/p/septa/262/latest/download",
+                    "realtimeUrls": ["https://www3.septa.org/gtfsrt/septarail-pa-us/Trip/rtTripUpdates.pb"],
                     // Excluding shapes makes loading faster.
                     exclude: ['shapes']
                 },
-            ],
-            realtime: [
-                "https://www3.septa.org/gtfsrt/septarail-pa-us/Trip/rtTripUpdates.pb"
             ],
         },
 
@@ -157,13 +163,15 @@ There are a few options to customize how the widget looks:
 
 ### Realtime
 To enable realtime arrival updates, add your agencies realtime GTFS to
-the `realtime` array:
+the `realtimeUrls` array:
 ```
-    gtfs_config {
-        ...
-        realtime: [
-            "https://example.com/path/to/gtfs-rt.pb"
-        ]
+gtfs_config: {
+    agencies: [
+        {
+            "url": "https://transitfeeds.com/p/septa/262/latest/download",
+            "realtimeUrls": ["https://www3.septa.org/gtfsrt/septarail-pa-us/Trip/rtTripUpdates.pb"],
+        },
+    ]
 ```
 #### Realtime Options
  - `showTimeEstimated`: Control how realtime delay estimates are displayed.
@@ -174,5 +182,5 @@ the `realtime` array:
 
 # Limitations
  - Only one block is supported; if you add two blocks they'll both display all queries.
- - The module calculates a few days worth of trips. Using `departuresPerRoute` on 
+ - The module calculates a few days worth of trips. Using high `departuresPerRoute` on 
    a low-frequency line may not fill the row.
