@@ -9,12 +9,7 @@
 
 // to download GTFS file
 const Log = require("logger");
-const fetch = require('fetch');
 const NodeHelper = require("node_helper");
-
-// GTFS stuff
-const gtfs = require('gtfs');
-const GtfsRealtimeBindings = require('gtfs-realtime-bindings-transit');
 
 module.exports = NodeHelper.create(
 {
@@ -22,7 +17,6 @@ module.exports = NodeHelper.create(
     start: function () {
         console.log(this.name + ' helper method started...'); /*eslint-disable-line*/
         this.busy = false;
-        this.realtime = {};
     },
 
     socketNotificationReceived: async function (notification, payload) {
@@ -44,20 +38,20 @@ module.exports = NodeHelper.create(
     },
 
     startup: async function(gtfs_config) {
+        this.gtfs = await import('gtfs');
+
         this.watch = [];
         // Import the data. Send a notification when ready.
-        Log.log("MMM-transitfeed: Importing with " + gtfs_config);
         if (this.gtfs_config === undefined) {
+            Log.log("MMM-transitfeed: Importing with " + gtfs_config);
             this.gtfs_config = gtfs_config
-            this.realtimeDownload();
-            await gtfs.import(this.gtfs_config);
+            await this.gtfs.importGtfs(this.gtfs_config);
+            this.gtfs.getRoutes({}, ['route_long_name', 'route_id']);
             Log.log("MMM-transitfeed: Done importing!");
-            this.db = await gtfs.openDb(this.gtfs_config);
-
 
             // Start broadcasting the stations & routes we're watching.
             setInterval(() => this.broadcast(), 1000*60*1);
-            setInterval(() => this.realtimeDownload(), 1000*60*5);
+            setInterval(() => this.gtfs.updateGtfsRealtime(this.gtfs_config), 1000*60*5);
         }
 
         // Send a ready message now that we're loaded.
@@ -73,14 +67,14 @@ module.exports = NodeHelper.create(
         // Process the query - perform any human name to ID lookups,
         // then place add it to the watchlist.
         // Find stops matching the query string
-        const routes = await gtfs.getRoutes({}, ['route_long_name', 'route_id']);
+        const routes = this.gtfs.getRoutes({}, ['route_long_name', 'route_id']);
         for (route of routes) {
             // If a user provided a route name, filter on it.
             if (query.route_name === undefined
                 || route.route_id.includes(query.route_name)
                 || route.route_long_name.includes(query.route_name)) {
 
-                const stops = await gtfs.getStops({route_id: route.route_id}, ['stop_name', 'stop_id']);
+                const stops = this.gtfs.getStops({route_id: route.route_id}, ['stop_name', 'stop_id']);
                 for (stop of stops) {
                     if (stop.stop_name.includes(query.stop_name)) {
                         query.stops[stop.stop_id] = stop;
@@ -101,12 +95,12 @@ module.exports = NodeHelper.create(
             for (const [_stop_id, stop] of Object.entries(query.stops)) {
                 for (const [_route_id, route] of Object.entries(query.routes)) {
                     // Find all trips for the route
-                    const trips = await gtfs.getTrips({route_id: route.route_id}, ['trip_id', 'direction_id', 'trip_headsign', 'service_id']);
+                    const trips = this.gtfs.getTrips({route_id: route.route_id}, ['trip_id', 'direction_id', 'trip_headsign', 'service_id']);
                     for (trip of trips) {
                         if (query.direction === undefined || query.direction == trip.direction_id) {
                             // Now we have the stop and all the trips.
-                            const stopDays = await gtfs.getCalendars({service_id: trip.service_id});
-                            const stoptime = await gtfs.getStoptimes({trip_id: trip.trip_id, stop_id: stop.stop_id}, ['id', 'departure_time', 'stop_sequence']);
+                            const stopDays = this.gtfs.getCalendars({service_id: trip.service_id});
+                            const stoptime = this.gtfs.getStoptimes({trip_id: trip.trip_id, stop_id: stop.stop_id}, ['departure_time', 'stop_sequence']);
 
                             // If stopDays is undefined, the calendar lookup failed.
                             // This happens if transit agencies use a calendar ("Summer", "Day after thanksgiving")
@@ -117,13 +111,12 @@ module.exports = NodeHelper.create(
 
                             const stopDatetimes = makeStopDatetimes(stopDays[0], stoptime[0].departure_time);
                             for (datetime of stopDatetimes) {
-                                const stop_delay = this.realtimeFor(trip.trip_id, stop.stop_sequence, datetime);
+                                const stop_delay = this.getRealtimeDelay(trip.trip_id, stop.stop_sequence, datetime);
                                 if (stop_delay !== null) realtime_count += 1;
 
                                 results[trip.trip_id + "@" + datetime] = 
                                     JSON.parse(JSON.stringify({
                                         // IDs for tracing
-                                        time_id: stoptime[0].id,
                                         stop_id: stop.stop_id,
                                         route_id: route.route_id,
                                         trip_id: trip.trip_id,
@@ -150,77 +143,59 @@ module.exports = NodeHelper.create(
                 + (Date.now() - start_time) + "ms");
         this.sendSocketNotification("GTFS_QUERY_RESULTS", results);
     },
-    realtimeDownload: async function() {
-        realtime = {};
-        // Check if realtime URLs are present
-        if (!this.gtfs_config.realtime) return;
-
-        // Update realtime data
-        for (realtimeURL of this.gtfs_config.realtime) {
-            Log.log("MMM-transitfeed: fetching realtime data from", realtimeURL);
-            const response = await fetch(realtimeURL);
-
-            if (!response.ok) {
-                const message = `Failed while fetching realtime data: ${realtimeURL}: ${response.status}`;
-                continue;
-            }
-
-            var feed = GtfsRealtimeBindings.transit_realtime.FeedMessage.decode(
-                new Uint8Array(await response.arrayBuffer()))
-            for (entity of feed.entity) {
-                if (entity.tripUpdate) {
-                    realtime[entity.tripUpdate.trip.tripId] = entity;
-                }
-            }
-        }
-        this.realtime = realtime;
-        Log.log("MMM-transitfeed: updated " + Object.keys(realtime).length + " trips with realtime data");
-    },
-    realtimeFor: function(trip_id, stop_sequence, stop_time) {
+    getRealtimeDelay: function(trip_id, stop_sequence, stop_time) {
         // Only look for realtime data if the vehicle's within an hour and up to 10m late.
         delay = null;
-        const entity = this.realtime[trip_id];
-        if (entity) {
-            if (entity.tripUpdate.stopTimeUpdate) {
-                var bestSequence = -1;
-                // If stopTimeUpdate is provided, use that.
-                // GTFS says updates apply to all stops from the given
-                // stop_sequence onwards, until superceded by another update.
-                for (stopTimeUpdate of entity.tripUpdate.stopTimeUpdate) {
-                    if (stopTimeUpdate.stopSequence < bestSequence ||
-                        stopTimeUpdate.stopSequence > stop_sequence) continue;
-                    bestSequence = stopTimeUpdate.stopSequence;
-                    delay = delayFromStopTimeUpdate(stop_time, stopTimeUpdate.departure, stopTimeUpdate.arrival)
-                }
-            }
-            // Otherwise fall back to generic delay.
-            if (delay === null) {
-                delay = entity.tripUpdate.delay;
-            }
+        const stopUpdates = this.gtfs.getStopTimesUpdates({trip_id: trip_id});
+        /* Updates have this form/fields:
+        [{
+            "trip_id": "CHE_719_V26_M",
+            "route_id": null,
+            "stop_id": "90719",
+            "stop_sequence": 3,
+            "arrival_delay": 180,
+            "departure_delay": null,
+            "departure_timestamp": null,
+            "arrival_timestamp": "1970-01-01T00:00:00.000Z",
+            "isUpdated": 1
+        }]
+         */
+        var bestSequence = -1;
+        // Find the update that's closest to our stop sequence
+        // (but no greater)
+        for (stopTimeUpdate of stopUpdates) {
+            if (stopTimeUpdate.stopSequence < bestSequence ||
+                stopTimeUpdate.stopSequence > stop_sequence) continue;
+            bestSequence = stopTimeUpdate.stopSequence;
+            delay = delayFromStopTimeUpdate(stop_time, stopTimeUpdate);
         }
         return delay;
     },
 })
 
-function delayFromStopTimeUpdate(stop_time, departure, arrival) {
+function delayFromStopTimeUpdate(stop_time, update) {
     // stopTimeUpdate can format delay in terms of adjusted
     // arrival or departure; and as a delay in seconds
     // or a new time. This works through all those options, preferring
     // departure time to arrival and seconds-delay to a new time.
-    var stopTimeEvent = null;
-    // Prefer departure to arrival, since that's the time we display.
-    if (arrival)
-        stopTimeEvent = arrival;
-    if (departure)
-        stopTimeEvent = departure;
+    //
+    // This returns the vehicle delay in seconds, or
+    // `null` if delay couldn't be calculated.
+    var delay = null;
+    if (update.arrival_timestamp)
+        delay = ((update.arrival_timestamp - stop_time) / 1000).toFixed();
+    if (update.departure_timestamp)
+        delay = ((update.departure_timestamp - stop_time) / 1000).toFixed();
+    // Ignore non-credible delays. SEPTA publishes "arrival_timestamp": "1970-01-01T00:00:00.000Z" sometimes.
+    if (Math.abs(delay) > 3600*12)
+        delay = null;
 
-    if (stopTimeUpdate.delay !== null)
-        return stopTimeEvent.delay;
-    if (stopTimeUpdate.time !== null)
-        return ((stopTimeUpdate.time - stop_time) / 1000).toFixed();
-    // null is important. A delay of 0 means the vehicle's on time.
-    // null explicitly says "no tracking".
-    return null;
+    if (update.arrival_delay)
+        delay = update.arrival_delay;
+    if (update.departure_delay)
+        delay = update.departure_delay;
+
+    return delay;
 }
 
 function makeStopDatetimes(stop_days, stop_time) {
