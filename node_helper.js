@@ -112,7 +112,10 @@ module.exports = NodeHelper.create(
                             const stopDatetimes = makeStopDatetimes(stopDays[0], stoptime[0].departure_time);
                             for (datetime of stopDatetimes) {
                                 const stop_delay = this.getRealtimeDelay(trip.trip_id, stop.stop_sequence, datetime);
-                                if (stop_delay !== null) realtime_count += 1;
+                                if (stop_delay !== null) {
+                                    realtime_count += 1;
+                                Log.log(route.route_id, " is ", stop_delay, " late");
+                                }
 
                                 results[trip.trip_id + "@" + datetime] = 
                                     JSON.parse(JSON.stringify({
@@ -195,6 +198,8 @@ function delayFromStopTimeUpdate(stop_time, update) {
     if (update.departure_delay)
         delay = update.departure_delay;
 
+    if (isNaN(delay))
+        return null;
     return delay;
 }
 

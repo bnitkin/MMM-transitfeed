@@ -20,7 +20,8 @@ Module.register("MMM-transitfeed", {
                 // These are SEPTA regional rail routes. Go to transitfeeds.com
                 // or your transit agency's site to find local GTFS data.
                 {
-                    "url": "https://transitfeeds.com/p/septa/262/latest/download",
+                    "url": "https://www3.septa.org/developer/google_rail.zip",
+                    "realtimeUrls": ["https://www3.septa.org/gtfsrt/septarail-pa-us/Trip/rtTripUpdates.pb"],
                     // Excluding shapes makes loading faster.
                     exclude: ['shapes']
                 },

@@ -102,8 +102,11 @@ npm install gtfs
 ## Required
 ### `gtfs_config`
 Unless you're using SEPTA, you'll need to find GTFS
-data for your transit agency. `transitfeeds.com` has a bunch, and if you
-search your agency for an API URL, you'll likely find something.
+data for your transit agency.
+`https://github.com/MobilityData/mobility-database-catalogs/tree/main/catalogs/sources/gtfs/`
+has a bunch (`schedule` for schedules, and `realtime` for realtime data).
+If not, try searching your agency for an
+API or developer resources, and you'll likely find something.
 
 The example above imports two GTFS files; any number is supported. Just duplicate or
 delete entries in the `agencies` list as needed.
@@ -111,7 +114,7 @@ delete entries in the `agencies` list as needed.
 In most cases, updating the `"url"` field should work. If not, The `gtfs_config`
 structure is fed directly to `gtfs` and supports auth-tokens and special headers.
 Advanced details are described at
-https://www.npmjs.com/package/gtfs/v/2.4.4#configuration-files
+https://www.npmjs.com/package/gtfs/v/4.5.1#agencies
 
 ### `queries`
 `queries` is a list of searches to run and determines what the widget displays.
