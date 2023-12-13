@@ -20,8 +20,16 @@ stations & routes you provide
 This release requires updates:
  - Upgrading `gtfs` requires manual intervention:
    ```
+   cd MagicMirror                       # Enter magicmirror project directory
    npm uninstall gtfs-realtime-bindings # Now part of gtfs
-   npm install gtfs --save-dev          # Force update to latest version
+   npm install gtfs --save-dev          # Force update to latest version 
+   ```
+ - If you have version errors about `The module was compiled against a different Node.js version`, try rebuilding `better-sqlite3`:
+   ```
+   cd MagicMirror
+   rm -r node_modules/better-sqlite3/
+   # Get Electron version with ./node_modules/.bin/electron --version
+   npm install better-sqlite3 --build-from-source --runtime=electron --target=26.4.3 --dist-url=https://electronjs.org/headers --force
    ```
  - In `config.js`, the `realtime` configuration option is moved to `realtimeUrls`
    as a subfield of `agencies`.
