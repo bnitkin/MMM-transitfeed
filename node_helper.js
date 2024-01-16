@@ -131,7 +131,7 @@ module.exports = NodeHelper.create(
                                         stop_time: datetime,
                                         stop_delay: stop_delay,
                                     }));
-                                //Log.log(route.route_long_name + " towards " + trip.trip_headsign + " at " + datetime + " #" + trip.trip_id);
+                                //Log.log(route.route_long_name + " towards " + trip.trip_headsign + " at " + datetime + " #" + trip.trip_id + " @ " + stop.stop_name);
                             }
                         }
                     }
