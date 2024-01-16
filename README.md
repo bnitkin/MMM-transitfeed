@@ -78,8 +78,10 @@ npm install gtfs
             {stop_name: "Norristown", direction: 1},
         ],
         departuresPerRoute: 3,
-        // If true, show minutes till arrival. If false, show arrival time in HH:MM
-        showTimeFromNow: false,
+        // Switch from showing clock time (10:38) to minutes until departure (18)
+        // showTimeFromNow minutes before departure. Set to 0 to always show clock
+        // time or a large number to always show minutes
+        showTimeFromNow: 15,
         // If true, use live tracking to show estimated arrival time.
         // If false, show a small +/- indicator to show late/early.
         showTimeEstimated: false,
@@ -160,8 +162,8 @@ There are a few options to customize how the widget looks:
 
  - `departuresPerRoute`: How many upcoming departures to show for each route.
    Defaults is `3`.
- - `showTimeFromNow`: If `true`, display minutes till departure. If `false`, display
-   clock-time of departure. Default is `false`.
+ - `showTimeFromNow`: Controls time display. The widget automatically switches from
+   clock-time departure to minutes-from-now `showTimeFromNow` minutes before departure.
  - `showStationNames`: Whether to show station names above the routes. Default `true`
  - `showAllTerminus`: Some routes have multiple terminii; either stations are skipped
    late at night or the train runs downtown then back out in different directions.

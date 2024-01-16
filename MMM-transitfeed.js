@@ -38,8 +38,10 @@ Module.register("MMM-transitfeed", {
             {stop_name: "Norristown", direction: 1},
         ],
         departuresPerRoute: 3,
-        // If true, show minutes till arrival. If false, show arrival time in HH:MM
-        showTimeFromNow: false,
+        // Switch from showing clock time (12:35) to relative time (22) X
+        // minutes from departure. Set to 0 to always use clock time, or a
+        // large number to always show relative time.
+        showTimeFromNow: 30,
         // If true, use live tracking to show estimated arrival time.
         // If false, show a small +/- indicator to show late/early.
         showTimeEstimated: false,
@@ -125,6 +127,13 @@ Module.register("MMM-transitfeed", {
 
             lastTrip = trip;
 
+            // Don't show trips that have departed.
+            var departure = trip.stop_time.getTime();
+            if (trip.stop_delay !== null) {
+                departure = new Date(trip.stop_time.getTime() + trip.stop_delay*1000);
+            }
+            if (departure < Date.now()) continue;
+
             // Only show departuresPerRoute departures.
             if (departureCount == this.config.departuresPerRoute) continue;
             departureCount += 1;
@@ -137,10 +146,11 @@ Module.register("MMM-transitfeed", {
             }
 
             let minutes = ((trip.stop_time - Date.now()) / 1000 / 60).toFixed();
-            if (this.config.showTimeFromNow)
+            if (minutes < this.config.showTimeFromNow)
                 departure_time.innerHTML = minutes;
             else
                 departure_time.innerHTML = trip.stop_time.toTimeString().slice(0,5);
+                // Never show a leading 0 in hours field.
                 if (departure_time.innerHTML[0] == '0')
                     departure_time.innerHTML = departure_time.innerHTML.slice(1,5);
 
@@ -233,9 +243,9 @@ Module.register("MMM-transitfeed", {
         trips = trips.sort(sortFunc);
         Log.log(trips)
         // Cull trips from the past
-        // (More than 5m ago, including estimated delay)
+        // (More than 15m ago to allow for realtime updates)
         this.trips = trips.filter(
-            trip => (trip.stop_time - Date.now()) > -(300)*1000);
+            trip => (trip.stop_time - Date.now()) > -(15*60)*1000);
         Log.log("Filtered to", this.trips.length);
 
         this.updateDom();

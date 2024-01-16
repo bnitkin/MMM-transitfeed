@@ -114,7 +114,7 @@ module.exports = NodeHelper.create(
                                 const stop_delay = this.getRealtimeDelay(trip.trip_id, stop.stop_sequence, datetime);
                                 if (stop_delay !== null) {
                                     realtime_count += 1;
-                                Log.log(route.route_id, " is ", stop_delay, " late");
+                                    Log.log(route.route_id, " is ", stop_delay, " late");
                                 }
 
                                 results[trip.trip_id + "@" + datetime] = 
@@ -131,6 +131,7 @@ module.exports = NodeHelper.create(
                                         stop_time: datetime,
                                         stop_delay: stop_delay,
                                     }));
+                                Log.log(route.route_long_name + " towards " + trip.trip_headsign + " at " + datetime + " #" + trip.trip_id);
                             }
                         }
                     }
