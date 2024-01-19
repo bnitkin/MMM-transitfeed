@@ -16,6 +16,23 @@ someone reading PDF timetables by hand every time anything changes.
 This module will pull the same GTFS sources and monitor a list of
 stations & routes you provide
 
+# Upgrading - BREAKING CHANGES
+This release requires updates:
+ - Upgrading `gtfs` requires manual intervention:
+   ```
+   cd MagicMirror                       # Enter magicmirror project directory
+   npm uninstall gtfs-realtime-bindings # Now part of gtfs
+   npm install gtfs --save-dev          # Force update to latest version 
+   ```
+ - If you have version errors about `The module was compiled against a different Node.js version`, try rebuilding `better-sqlite3`:
+   ```
+   cd MagicMirror
+   rm -r node_modules/better-sqlite3/
+   # Get Electron version with ./node_modules/.bin/electron --version
+   npm install better-sqlite3 --build-from-source --runtime=electron --target=26.4.3 --dist-url=https://electronjs.org/headers --force
+   ```
+ - In `config.js`, the `realtime` configuration option is moved to `realtimeUrls`
+   as a subfield of `agencies`.
 
 # Installation
 
@@ -28,8 +45,7 @@ to bring in libraries.)
 git clone https://github.com/bnitkin/MMM-transitfeed.git
 
 # Install the gtfs parsing library
-npm install gtfs@2.4.4
-npm install gtfs-realtime-bindings-transit
+npm install gtfs
 ```
 
 # Configuration
@@ -48,12 +64,10 @@ npm install gtfs-realtime-bindings-transit
                 // or your transit agency's site to find local GTFS data.
                 {
                     "url": "https://transitfeeds.com/p/septa/262/latest/download",
+                    "realtimeUrls": ["https://www3.septa.org/gtfsrt/septarail-pa-us/Trip/rtTripUpdates.pb"],
                     // Excluding shapes makes loading faster.
                     exclude: ['shapes']
                 },
-            ],
-            realtime: [
-                "https://www3.septa.org/gtfsrt/septarail-pa-us/Trip/rtTripUpdates.pb"
             ],
         },
 
@@ -64,8 +78,10 @@ npm install gtfs-realtime-bindings-transit
             {stop_name: "Norristown", direction: 1},
         ],
         departuresPerRoute: 3,
-        // If true, show minutes till arrival. If false, show arrival time in HH:MM
-        showTimeFromNow: false,
+        // Switch from showing clock time (10:38) to minutes until departure (18)
+        // showTimeFromNow minutes before departure. Set to 0 to always show clock
+        // time or a large number to always show minutes
+        showTimeFromNow: 15,
         // If true, use live tracking to show estimated arrival time.
         // If false, show a small +/- indicator to show late/early.
         showTimeEstimated: false,
@@ -96,8 +112,11 @@ npm install gtfs-realtime-bindings-transit
 ## Required
 ### `gtfs_config`
 Unless you're using SEPTA, you'll need to find GTFS
-data for your transit agency. `transitfeeds.com` has a bunch, and if you
-search your agency for an API URL, you'll likely find something.
+data for your transit agency.
+`https://github.com/MobilityData/mobility-database-catalogs/tree/main/catalogs/sources/gtfs/`
+has a bunch (`schedule` for schedules, and `realtime` for realtime data).
+If not, try searching your agency for an
+API or developer resources, and you'll likely find something.
 
 The example above imports two GTFS files; any number is supported. Just duplicate or
 delete entries in the `agencies` list as needed.
@@ -105,7 +124,7 @@ delete entries in the `agencies` list as needed.
 In most cases, updating the `"url"` field should work. If not, The `gtfs_config`
 structure is fed directly to `gtfs` and supports auth-tokens and special headers.
 Advanced details are described at
-https://www.npmjs.com/package/gtfs/v/2.4.4#configuration-files
+https://www.npmjs.com/package/gtfs/v/4.5.1#agencies
 
 ### `queries`
 `queries` is a list of searches to run and determines what the widget displays.
@@ -143,8 +162,8 @@ There are a few options to customize how the widget looks:
 
  - `departuresPerRoute`: How many upcoming departures to show for each route.
    Defaults is `3`.
- - `showTimeFromNow`: If `true`, display minutes till departure. If `false`, display
-   clock-time of departure. Default is `false`.
+ - `showTimeFromNow`: Controls time display. The widget automatically switches from
+   clock-time departure to minutes-from-now `showTimeFromNow` minutes before departure.
  - `showStationNames`: Whether to show station names above the routes. Default `true`
  - `showAllTerminus`: Some routes have multiple terminii; either stations are skipped
    late at night or the train runs downtown then back out in different directions.
@@ -157,13 +176,15 @@ There are a few options to customize how the widget looks:
 
 ### Realtime
 To enable realtime arrival updates, add your agencies realtime GTFS to
-the `realtime` array:
+the `realtimeUrls` array:
 ```
-    gtfs_config {
-        ...
-        realtime: [
-            "https://example.com/path/to/gtfs-rt.pb"
-        ]
+gtfs_config: {
+    agencies: [
+        {
+            "url": "https://transitfeeds.com/p/septa/262/latest/download",
+            "realtimeUrls": ["https://www3.septa.org/gtfsrt/septarail-pa-us/Trip/rtTripUpdates.pb"],
+        },
+    ]
 ```
 #### Realtime Options
  - `showTimeEstimated`: Control how realtime delay estimates are displayed.
@@ -174,5 +195,5 @@ the `realtime` array:
 
 # Limitations
  - Only one block is supported; if you add two blocks they'll both display all queries.
- - The module calculates a few days worth of trips. Using `departuresPerRoute` on 
+ - The module calculates a few days worth of trips. Using high `departuresPerRoute` on 
    a low-frequency line may not fill the row.
