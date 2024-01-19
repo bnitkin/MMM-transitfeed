@@ -150,7 +150,7 @@ module.exports = NodeHelper.create(
     getRealtimeDelay: function(trip_id, stop_sequence, stop_time) {
         // Only look for realtime data if the vehicle's within an hour and up to 10m late.
         delay = null;
-        const stopUpdates = this.gtfs.getStopTimesUpdates({trip_id: trip_id});
+        const stopUpdates = this.gtfs.getStopTimeUpdates({trip_id: trip_id});
         /* Updates have this form/fields:
         [{
             "trip_id": "CHE_719_V26_M",
