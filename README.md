@@ -36,10 +36,7 @@ This release requires updates:
 
 # Installation
 
-Installation is pretty standard, though a specific version of the NPM GTFS library
-is required. (The new one requires `import` syntax, and MagicMirror uses `require`
-to bring in libraries.)
-
+Installation is pretty standard:
 ```
 # Clone the module into your `modules/` directory:
 git clone https://github.com/bnitkin/MMM-transitfeed.git
