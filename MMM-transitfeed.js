@@ -1,4 +1,4 @@
-/* Magic Mirror
+/* MagicMirror²
  * Module: MMM-transitfeed
  * A generic transit parser to display upcoming departures
  * for a selected set of lines

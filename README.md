@@ -2,11 +2,11 @@
 
 ![Screenshot](/res/screenshot.png?raw=true "Screenshot of module")
 
-MagicMirror: https://docs.magicmirror.builders/
+MagicMirror²: https://docs.magicmirror.builders/
 
-This MagicMirror module shows upcoming departure times for a user-specified
+This MagicMirror² module shows upcoming departure times for a user-specified
 set of transit stations and routes. It's designed to do the same thing as
-https://github.com/BlinkTagInc/transit-arrivals-widget (but in MagicMirror!)
+https://github.com/BlinkTagInc/transit-arrivals-widget (but in MagicMirror²!)
 
 GTFS is a general-purpose arrivals board for public transit.
 Most transit agencies publish schedules in a GTFS format - that's
