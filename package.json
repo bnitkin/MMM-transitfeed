@@ -12,6 +12,7 @@
       "transit",
       "gtfs",
       "travel",
+      "public transport",
       "train", "bus", "subway"
     ],
     "author": "bnitkin",
