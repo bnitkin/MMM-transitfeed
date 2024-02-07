@@ -1,4 +1,4 @@
-/* Magic Mirror
+/* MagicMirror²
  * Module: MMM-transitfeed
  * A generic transit parser to display upcoming departures
  * for a selected set of lines
@@ -227,7 +227,7 @@ function makeStopDatetimes(stop_days, stop_time) {
     const departures = [];
 
     // Create a Date with today's date and stop_time for the time.
-    const dateCandidate = new Date();
+    const dateCandidate = new Date(Date.now());
     const time = new Date('2000-01-01T' + stop_time)
     dateCandidate.setHours(time.getHours());
     dateCandidate.setMinutes(time.getMinutes());
