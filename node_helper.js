@@ -111,7 +111,7 @@ module.exports = NodeHelper.create(
 
                             const stopDatetimes = makeStopDatetimes(stopDays[0], stoptime[0].departure_time);
                             for (datetime of stopDatetimes) {
-                                const stop_delay = this.getRealtimeDelay(trip.trip_id, stop.stop_sequence, datetime);
+                                const stop_delay = this.getRealtimeDelay(route.route_id, trip.trip_id, stop.stop_sequence, datetime);
                                 if (stop_delay !== null) {
                                     realtime_count += 1;
                                     Log.log(route.route_id, " is ", stop_delay, " late");
@@ -147,10 +147,10 @@ module.exports = NodeHelper.create(
                 + (Date.now() - start_time) + "ms");
         this.sendSocketNotification("GTFS_QUERY_RESULTS", results);
     },
-    getRealtimeDelay: function(trip_id, stop_sequence, stop_time) {
+    getRealtimeDelay: function(route_id, trip_id, stop_sequence, stop_time) {
         // Only look for realtime data if the vehicle's within an hour and up to 10m late.
         delay = null;
-        const stopUpdates = this.gtfs.getStopTimeUpdates({trip_id: trip_id});
+        const stopUpdates = this.gtfs.getStopTimeUpdates({route_id: route_id});
         /* Updates have this form/fields:
         [{
             "trip_id": "CHE_719_V26_M",
@@ -168,11 +168,16 @@ module.exports = NodeHelper.create(
         // Find the update that's closest to our stop sequence
         // (but no greater)
         for (stopTimeUpdate of stopUpdates) {
+            if (!stopTimeUpdate.trip_id.includes(trip_id) &&
+                !trip_id.includes(stopTimeUpdate.trip_id))
+                continue;
             if (stopTimeUpdate.stopSequence < bestSequence ||
-                stopTimeUpdate.stopSequence > stop_sequence) continue;
+                stopTimeUpdate.stopSequence > stop_sequence)
+                continue;
             bestSequence = stopTimeUpdate.stopSequence;
             delay = delayFromStopTimeUpdate(stop_time, stopTimeUpdate);
         }
+        if (stopUpdates) Log.log(route_id, stopUpdates);
         return delay;
     },
 })
