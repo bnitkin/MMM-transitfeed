@@ -177,7 +177,7 @@ module.exports = NodeHelper.create(
             bestSequence = stopTimeUpdate.stopSequence;
             delay = delayFromStopTimeUpdate(stop_time, stopTimeUpdate);
         }
-        if (stopUpdates) Log.log(route_id, stopUpdates);
+        //if (stopUpdates) Log.log(route_id, stopUpdates);
         return delay;
     },
 })
