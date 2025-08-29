@@ -234,6 +234,7 @@ Module.register("MMM-transitfeed", {
         // Convert stop_time back to a Date (lost in serialization from backend
         for (trip of trips) {
             trip.stop_time = new Date(trip.stop_time);
+            trip.stop_name = this.tr(trip.stop_name);
             trip.route_name = this.tr(trip.route_name);
             trip.trip_terminus = this.tr(trip.trip_terminus);
             trip.route_id = this.tr(trip.route_id);
